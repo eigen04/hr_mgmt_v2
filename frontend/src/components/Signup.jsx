@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Calendar, User, Mail, Lock, Building, ChevronLeft } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 
@@ -10,12 +10,72 @@ export default function Signup() {
     confirmPassword: '',
     email: '',
     department: '',
-    role: 'employee',
+    role: '', // Changed to empty string to match dropdown default
+    gender: ''
   });
 
+  const [departments, setDepartments] = useState([]);
+  const [roles, setRoles] = useState([]);
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [confirmPasswordVisible, setConfirmPasswordVisible] = useState(false);
+  const [notification, setNotification] = useState({ message: '', type: '' });
   const navigate = useNavigate();
+
+  // Fetch departments and roles from the backend
+  useEffect(() => {
+    const fetchDepartments = async () => {
+      try {
+        const response = await fetch("http://localhost:8081/api/departments", {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
+        const data = await response.json();
+        if (response.ok) {
+          setDepartments(data);
+        } else {
+          setNotification({ message: 'Failed to load departments.', type: 'error' });
+        }
+      } catch (error) {
+        console.error("Error fetching departments:", error);
+        setNotification({ message: 'Error loading departments.', type: 'error' });
+      }
+    };
+
+    const fetchRoles = async () => {
+      try {
+        const response = await fetch("http://localhost:8081/api/roles", {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
+        const data = await response.json();
+        if (response.ok) {
+          setRoles(data);
+        } else {
+          setNotification({ message: 'Failed to load roles.', type: 'error' });
+        }
+      } catch (error) {
+        console.error("Error fetching roles:", error);
+        setNotification({ message: 'Error loading roles.', type: 'error' });
+      }
+    };
+
+    fetchDepartments();
+    fetchRoles();
+  }, []);
+
+  // Clear notification after 5 seconds
+  useEffect(() => {
+    if (notification.message) {
+      const timer = setTimeout(() => {
+        setNotification({ message: '', type: '' });
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [notification]);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -25,7 +85,7 @@ export default function Signup() {
     e.preventDefault();
   
     if (formData.password !== formData.confirmPassword) {
-      alert("Passwords do not match!");
+      setNotification({ message: 'Passwords do not match!', type: 'error' });
       return;
     }
   
@@ -33,7 +93,7 @@ export default function Signup() {
     const { confirmPassword, ...userData } = formData;
   
     try {
-      const response = await fetch("http://localhost:8082/api/auth/signup", {
+      const response = await fetch("http://localhost:8081/api/auth/signup", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -44,8 +104,7 @@ export default function Signup() {
       const responseData = await response.json();
   
       if (response.ok) {
-        alert("Account created successfully!");
-        // Clear form fields
+        setNotification({ message: 'Account created successfully!', type: 'success' });
         setFormData({
           fullName: '',
           username: '',
@@ -53,16 +112,22 @@ export default function Signup() {
           confirmPassword: '',
           email: '',
           department: '',
-          role: 'employee',
+          role: '',
+          gender: ''
         });
-        // Redirect to main page
-        navigate('/');
+        setTimeout(() => navigate('/'), 2000);
       } else {
-        alert("Signup failed: " + (responseData.message || "Unknown error"));
+        setNotification({ 
+          message: `Signup failed: ${responseData.message || 'Unknown error'}`, 
+          type: 'error' 
+        });
       }
     } catch (error) {
       console.error("Signup error:", error);
-      alert("An error occurred. Please try again.");
+      setNotification({ 
+        message: 'An error occurred. Please try again.', 
+        type: 'error' 
+      });
     }
   };
 
@@ -100,6 +165,17 @@ export default function Signup() {
           
           {/* Form Content */}
           <div className="p-6">
+            {/* Notification */}
+            {notification.message && (
+              <div className={`mb-4 p-3 rounded-md text-sm ${
+                notification.type === 'success' 
+                  ? 'bg-green-100 text-green-700' 
+                  : 'bg-red-100 text-red-700'
+              }`}>
+                {notification.message}
+              </div>
+            )}
+
             <div className="space-y-4">
               {/* Full Name */}
               <div>
@@ -155,25 +231,30 @@ export default function Signup() {
                 </div>
               </div>
               
-              {/* Department */}
+              {/* Department Dropdown */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <Building size={18} className="text-gray-400" />
                   </div>
-                  <input
-                    type="text"
+                  <select
                     name="department"
                     value={formData.department}
                     onChange={handleChange}
-                    className="pl-10 block w-full rounded-md border border-gray-300 py-2 px-3 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    placeholder="GIS Department"
-                  />
+                    className="pl-10 block w-full rounded-md border border-gray-300 py-2 px-3 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 appearance-none"
+                  >
+                    <option value="">Select Department</option>
+                    {departments.map((dept) => (
+                      <option key={dept.id} value={dept.name}>
+                        {dept.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
               
-              {/* Role */}
+              {/* Role Dropdown */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
                 <div className="relative">
@@ -186,10 +267,33 @@ export default function Signup() {
                     onChange={handleChange}
                     className="pl-10 block w-full rounded-md border border-gray-300 py-2 px-3 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 appearance-none"
                   >
-                    <option value="employee">Employee</option>
-                    <option value="hr">HR Manager</option>
-                    <option value="hod">Department Head</option>
-                    <option value="director">Director</option>
+                    <option value="">Select Role</option>
+                    {roles.map((role) => (
+                      <option key={role.id} value={role.name.toLowerCase().replace(/\s+/g, '')}>
+                        {role.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              
+              {/* Gender */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <User size={18} className="text-gray-400" />
+                  </div>
+                  <select
+                    name="gender"
+                    value={formData.gender}
+                    onChange={handleChange}
+                    className="pl-10 block w-full rounded-md border border-gray-300 py-2 px-3 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 appearance-none"
+                  >
+                    <option value="">Select Gender</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
                   </select>
                 </div>
               </div>

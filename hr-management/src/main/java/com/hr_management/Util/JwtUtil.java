@@ -1,6 +1,7 @@
 package com.hr_management.Util;
 
 import io.jsonwebtoken.*;
+import org.springframework.security.core.userdetails.UserDetails;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
@@ -11,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.Function;
 
 @Component
 public class JwtUtil {
@@ -23,19 +25,35 @@ public class JwtUtil {
 
     private SecretKey getSigningKey() {
         try {
-            // Try standard Base64 decoding
             byte[] keyBytes = Decoders.BASE64.decode(secret);
             return Keys.hmacShaKeyFor(keyBytes);
         } catch (Exception e) {
-            // Fallback for non-Base64 encoded secrets
             byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
             return Keys.hmacShaKeyFor(keyBytes);
         }
     }
 
-    public String generateToken(String username, String role) {
+    public String extractUsername(String token) {
+        return extractClaim(token, Claims::getSubject);
+    }
+
+    public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
+        final Claims claims = extractAllClaims(token);
+        return claimsResolver.apply(claims);
+    }
+
+    private Claims extractAllClaims(String token) {
+        return Jwts.parserBuilder()
+                .setSigningKey(getSigningKey())
+                .build()
+                .parseClaimsJws(token)
+                .getBody();
+    }
+
+    public String generateToken(String username, String role, String department) {
         Map<String, Object> claims = new HashMap<>();
-        claims.put("role", role);
+        claims.put("role", "ROLE_" + role.toUpperCase()); // Store with ROLE_ prefix
+        claims.put("department", department);
         return createToken(claims, username);
     }
 
@@ -49,28 +67,29 @@ public class JwtUtil {
                 .compact();
     }
 
-    public Claims extractClaims(String token) {
-        return Jwts.parserBuilder()
-                .setSigningKey(getSigningKey())
-                .build()
-                .parseClaimsJws(token)
-                .getBody();
-    }
-
-    public String extractUsername(String token) {
-        return extractClaims(token).getSubject();
-    }
-
-    public String extractRole(String token) {
-        return extractClaims(token).get("role", String.class);
-    }
-
     public boolean isTokenValid(String token, String username) {
         final String extractedUsername = extractUsername(token);
         return (extractedUsername.equals(username) && !isTokenExpired(token));
     }
 
     private boolean isTokenExpired(String token) {
-        return extractClaims(token).getExpiration().before(new Date());
+        return extractAllClaims(token).getExpiration().before(new Date());
+    }
+
+    public String extractRole(String token) {
+        return extractAllClaims(token).get("role", String.class);
+    }
+
+    public String extractDepartment(String token) {
+        return extractAllClaims(token).get("department", String.class);
+    }
+
+    private Date extractExpiration(String token) {
+        return extractClaim(token, Claims::getExpiration);
+    }
+
+    public Boolean validateToken(String token, UserDetails userDetails) {
+        final String username = extractUsername(token);
+        return (username.equals(userDetails.getUsername()) && !isTokenExpired(token));
     }
 }

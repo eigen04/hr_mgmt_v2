@@ -3,8 +3,8 @@ import AppRoutes from './routes';
 
 const App = () => {
   return (
-    <BrowserRouter>
-      <AppRoutes />
+    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+    <AppRoutes />
     </BrowserRouter>
   );
 };

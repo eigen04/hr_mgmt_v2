@@ -56,6 +56,7 @@ public class AuthController {
         user.setEmail(userDTO.getEmail());
         user.setDepartment(userDTO.getDepartment());
         user.setRole(userDTO.getRole());
+        user.setGender(userDTO.getGender());
 
         userRepository.save(user);
         return ResponseEntity.ok(new SuccessResponse("User registered successfully"));
@@ -72,18 +73,19 @@ public class AuthController {
 
         // Normalize role to uppercase
         String role = user.getRole().toUpperCase();
-        String token = jwtUtil.generateToken(user.getUsername(), role);
+        String token = jwtUtil.generateToken(user.getUsername(), role, user.getDepartment()); // ✅ Pass 3 arguments
         return ResponseEntity.ok(new LoginResponse(token, role));
     }
 
     // -------------------- FORGOT PASSWORD --------------------
     @PostMapping("/forgot-password")
     public ResponseEntity<?> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
-        User user = userRepository.findByEmail(request.getEmail());
-        if (user == null) {
+        Optional<User> optionalUser = userRepository.findByEmail(request.getEmail());
+        if (optionalUser.isEmpty()) {
             return ResponseEntity.badRequest().body(new ErrorResponse("No account found with this email"));
         }
 
+        User user = optionalUser.get();
         String token = UUID.randomUUID().toString();
         PasswordResetToken resetToken = new PasswordResetToken();
         resetToken.setToken(token);
@@ -94,6 +96,7 @@ public class AuthController {
         emailService.sendPasswordResetEmail(request.getEmail(), token);
         return ResponseEntity.ok(new SuccessResponse("Password reset email sent successfully"));
     }
+
 
     // -------------------- RESET PASSWORD --------------------
     @PostMapping("/reset-password")
@@ -137,21 +140,32 @@ class UserDTO {
     private String department;
     @NotBlank
     private String role;
+    @NotBlank
+    private String gender; // <-- Add this field
 
     // Getters and setters
     public String getFullName() { return fullName; }
     public void setFullName(String fullName) { this.fullName = fullName; }
+
     public String getUsername() { return username; }
     public void setUsername(String username) { this.username = username; }
+
     public String getPassword() { return password; }
     public void setPassword(String password) { this.password = password; }
+
     public String getEmail() { return email; }
     public void setEmail(String email) { this.email = email; }
+
     public String getDepartment() { return department; }
     public void setDepartment(String department) { this.department = department; }
+
     public String getRole() { return role; }
     public void setRole(String role) { this.role = role; }
+
+    public String getGender() { return gender; } // <-- Add this
+    public void setGender(String gender) { this.gender = gender; } // <-- And this
 }
+
 
 class LoginRequest {
     @NotBlank

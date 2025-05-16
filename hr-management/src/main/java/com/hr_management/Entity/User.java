@@ -1,7 +1,6 @@
 package com.hr_management.Entity;
 
 import jakarta.persistence.*;
-import java.time.LocalDate;
 
 @Entity
 @Table(name = "users")
@@ -29,7 +28,13 @@ public class User {
     @Column(nullable = false)
     private String role;
 
-    // Getters and setters
+    @Column
+    private String gender;
+
+    @Embedded
+    private LeaveBalance leaveBalance = new LeaveBalance(); // initialize with default values
+
+    // Getters and Setters
     public Long getId() {
         return id;
     }
@@ -84,5 +89,31 @@ public class User {
 
     public void setRole(String role) {
         this.role = role;
+    }
+
+    public String getGender() {
+        return gender;
+    }
+
+    public void setGender(String gender) {
+        this.gender = gender;
+    }
+
+    public LeaveBalance getLeaveBalance() {
+        return leaveBalance;
+    }
+
+    public void setLeaveBalance(LeaveBalance leaveBalance) {
+        this.leaveBalance = leaveBalance;
+    }
+    @Column(nullable = false)
+    private String status = "ACTIVE"; // Add this field
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
     }
 }

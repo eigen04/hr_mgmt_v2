@@ -1,0 +1,44 @@
+2025-05-16T10:20:27.792+05:30  INFO 9060 --- [main] c.hr_management.HrManagementApplication  : Starting HrManagementApplication using Java 21.0.6 with PID 9060 (C:\Users\ANANT AGARWAL\proj\hr-management\target\classes started by ANANT AGARWAL in C:\Users\ANANT AGARWAL\proj\hr-management)
+2025-05-16T10:20:27.809+05:30  INFO 9060 --- [main] c.hr_management.HrManagementApplication  : No active profile set, falling back to 1 default profile: "default"
+2025-05-16T10:20:29.427+05:30  INFO 9060 --- [main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2025-05-16T10:20:29.601+05:30  INFO 9060 --- [main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 146 ms. Found 5 JPA repository interfaces.
+2025-05-16T10:20:31.220+05:30  INFO 9060 --- [main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port 8081 (http)
+2025-05-16T10:20:31.242+05:30  INFO 9060 --- [main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2025-05-16T10:20:31.242+05:30  INFO 9060 --- [main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/10.1.40]
+2025-05-16T10:20:31.407+05:30  INFO 9060 --- [main] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring embedded WebApplicationContext
+2025-05-16T10:20:31.408+05:30  INFO 9060 --- [main] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 3449 ms
+2025-05-16T10:20:31.771+05:30  INFO 9060 --- [main] o.hibernate.jpa.internal.util.LogHelper  : HHH000204: Processing PersistenceUnitInfo [name: default]
+2025-05-16T10:20:31.893+05:30  INFO 9060 --- [main] org.hibernate.Version                    : HHH000412: Hibernate ORM core version 6.6.13.Final
+2025-05-16T10:20:31.944+05:30  INFO 9060 --- [main] o.h.c.internal.RegionFactoryInitiator    : HHH000026: Second-level cache disabled
+2025-05-16T10:20:32.513+05:30  INFO 9060 --- [main] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2025-05-16T10:20:32.574+05:30  INFO 9060 --- [main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2025-05-16T10:20:33.226+05:30  INFO 9060 --- [main] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection com.mysql.cj.jdbc.ConnectionImpl@3a70575
+2025-05-16T10:20:33.230+05:30  INFO 9060 --- [main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+2025-05-16T10:20:33.334+05:30  WARN 9060 --- [main] org.hibernate.orm.deprecation            : HHH90000025: MySQL8Dialect does not need to be specified explicitly using 'hibernate.dialect' (remove the property setting and it will be selected by default)
+2025-05-16T10:20:33.336+05:30  WARN 9060 --- [main] org.hibernate.orm.deprecation            : HHH90000026: MySQL8Dialect has been deprecated; use org.hibernate.dialect.MySQLDialect instead
+2025-05-16T10:20:33.372+05:30  INFO 9060 --- [main] org.hibernate.orm.connections.pooling    : HHH10001005: Database info:
+	Database JDBC URL [Connecting through datasource 'HikariDataSource (HikariPool-1)']
+	Database driver: undefined/unknown
+	Database version: 8.0
+	Autocommit mode: undefined/unknown
+	Isolation level: undefined/unknown
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2025-05-16T10:20:34.729+05:30  INFO 9060 --- [main] o.h.e.t.j.p.i.JtaPlatformInitiator       : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2025-05-16T10:20:34.949+05:30  INFO 9060 --- [main] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2025-05-16T10:20:35.628+05:30  INFO 9060 --- [main] o.s.d.j.r.query.QueryEnhancerFactory     : Hibernate is in classpath; If applicable, HQL parser will be used.
+2025-05-16T10:20:36.654+05:30  WARN 9060 --- [main] JpaBaseConfiguration$JpaWebConfiguration : spring.jpa.open-in-view is enabled by default. Therefore, database queries may be performed during view rendering. Explicitly configure spring.jpa.open-in-view to disable this warning
+2025-05-16T10:20:36.679+05:30  WARN 9060 --- [main] r$InitializeUserDetailsManagerConfigurer : Found 2 UserDetailsService beans, with names [userService, userDetailsService]. Global Authentication Manager will not use a UserDetailsService for username/password login. Consider publishing a single UserDetailsService bean.
+2025-05-16T10:20:37.553+05:30  INFO 9060 --- [main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port 8081 (http) with context path '/'
+2025-05-16T10:20:37.568+05:30  INFO 9060 --- [main] c.hr_management.HrManagementApplication  : Started HrManagementApplication in 11.372 seconds (process running for 11.887)
+2025-05-16T10:21:05.481+05:30  INFO 9060 --- [http-nio-0.0.0.0-8081-exec-1] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring DispatcherServlet 'dispatcherServlet'
+2025-05-16T10:21:05.481+05:30  INFO 9060 --- [http-nio-0.0.0.0-8081-exec-1] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServlet'
+2025-05-16T10:21:05.481+05:30  INFO 9060 --- [http-nio-0.0.0.0-8081-exec-1] o.s.web.servlet.DispatcherServlet        : Completed initialization in 0 ms
+2025-05-16T10:24:15.618+05:30  INFO 9060 --- [http-nio-0.0.0.0-8081-exec-6] com.hr_management.service.LeaveService   : Applying leave for user: 27, type: CL
+2025-05-16T10:24:15.655+05:30  INFO 9060 --- [http-nio-0.0.0.0-8081-exec-6] com.hr_management.service.LeaveService   : Leave application saved: ID 20
+2025-05-16T10:24:31.142+05:30  INFO 9060 --- [http-nio-0.0.0.0-8081-exec-5] com.hr_management.service.LeaveService   : Applying leave for user: 27, type: HALF_DAY
+2025-05-16T10:24:31.174+05:30  INFO 9060 --- [http-nio-0.0.0.0-8081-exec-5] com.hr_management.service.LeaveService   : Leave application saved: ID 21
+2025-05-16T10:39:13.313+05:30  WARN 9060 --- [HikariPool-1 housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=3m39s723ms493µs400ns).
+2025-05-16T10:40:06.194+05:30  INFO 9060 --- [http-nio-0.0.0.0-8081-exec-6] com.hr_management.service.LeaveService   : Rejecting leave application with ID: 20
+2025-05-16T10:40:06.224+05:30  INFO 9060 --- [http-nio-0.0.0.0-8081-exec-6] com.hr_management.service.LeaveService   : Leave rejected for application ID: 20
+2025-05-16T11:04:06.995+05:30  WARN 9060 --- [HikariPool-1 housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=3m23s293ms564µs900ns).
