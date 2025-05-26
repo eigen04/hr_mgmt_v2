@@ -15,13 +15,15 @@ export default function EmployeeDashboard() {
         leaveType: 'CL',
         startDate: '',
         endDate: '',
-        reason: '',
-        isHalfDay: false
+        reason: ''
     });
     const [error, setError] = useState('');
     const [successMessage, setSuccessMessage] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const navigate = useNavigate();
+
+    // Current date for validation (May 20, 2025)
+    const today = new Date('2025-05-20').toISOString().split('T')[0];
 
     useEffect(() => {
         const fetchUserData = async () => {
@@ -108,21 +110,8 @@ export default function EmployeeDashboard() {
         navigate('/');
     };
 
-    const calculateEndDate = (startDate, leaveType) => {
-        if (!startDate) return '';
-        const start = new Date(startDate);
-        if (leaveType === 'ML') {
-            start.setDate(start.getDate() + 179); // 180 days
-        } else if (leaveType === 'PL') {
-            start.setDate(start.getDate() + 14); // 15 days
-        }
-        return start.toISOString().split('T')[0];
-    };
-
-    const calculateLeaveDays = (startDate, endDate, leaveType, isHalfDay) => {
-        if (isHalfDay) return 0.5;
-        if (leaveType === 'ML') return 180;
-        if (leaveType === 'PL') return 15;
+    const calculateLeaveDays = (startDate, endDate, leaveType) => {
+        if (leaveType === 'HALF_DAY_CL' || leaveType === 'HALF_DAY_EL') return 0.5;
         if (!endDate) return 1;
         const start = new Date(startDate);
         const end = new Date(endDate);
@@ -130,25 +119,69 @@ export default function EmployeeDashboard() {
         return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
     };
 
+    // Function to check for overlapping leaves
+    const hasOverlappingLeaves = (startDate, endDate, leaveType) => {
+        const newStart = new Date(startDate);
+        const newEnd = (leaveType === 'HALF_DAY_CL' || leaveType === 'HALF_DAY_EL') ? new Date(startDate) : new Date(endDate);
+
+        return leaveApplications.some((application) => {
+            if (application.status === 'REJECTED') return false; // Ignore rejected leaves
+
+            const existingStart = new Date(application.startDate);
+            const existingEnd = (application.leaveType === 'HALF_DAY_CL' || application.leaveType === 'HALF_DAY_EL') 
+                ? new Date(application.startDate) 
+                : new Date(application.endDate);
+
+            return existingStart <= newEnd && existingEnd >= newStart;
+        });
+    };
+
     const handleLeaveSubmit = async () => {
         setIsSubmitting(true);
         setError('');
         setSuccessMessage('');
-    
-        // Step 1: Validate required fields
+
         if (!leaveFormData.startDate || !leaveFormData.reason) {
             setError('Please fill all required fields');
             setIsSubmitting(false);
             return;
         }
-    
-        if (leaveFormData.leaveType !== 'ML' && leaveFormData.leaveType !== 'PL' && !leaveFormData.isHalfDay && !leaveFormData.endDate) {
-            setError('Please provide an end date for non-maternity/paternity leaves');
+
+        if (leaveFormData.leaveType !== 'HALF_DAY_CL' && leaveFormData.leaveType !== 'HALF_DAY_EL' && !leaveFormData.endDate) {
+            setError('Please provide an end date');
             setIsSubmitting(false);
             return;
         }
-    
-        // Step 2: Fetch the latest leave balance from the server
+
+        if (leaveFormData.endDate && new Date(leaveFormData.endDate) < new Date(leaveFormData.startDate)) {
+            setError('End date cannot be earlier than start date');
+            setIsSubmitting(false);
+            return;
+        }
+
+        const leaveDays = calculateLeaveDays(leaveFormData.startDate, leaveFormData.endDate, leaveFormData.leaveType);
+
+        if (leaveFormData.leaveType === 'ML' && leaveDays > 182) {
+            setError('Maternity leave cannot exceed 182 days');
+            setIsSubmitting(false);
+            return;
+        }
+        if (leaveFormData.leaveType === 'PL' && leaveDays > 15) {
+            setError('Paternity leave cannot exceed 15 days');
+            setIsSubmitting(false);
+            return;
+        }
+
+        // Validation: Check for overlapping leaves on the frontend
+        const endDateForOverlap = (leaveFormData.leaveType === 'HALF_DAY_CL' || leaveFormData.leaveType === 'HALF_DAY_EL') 
+            ? leaveFormData.startDate 
+            : leaveFormData.endDate;
+        if (hasOverlappingLeaves(leaveFormData.startDate, endDateForOverlap, leaveFormData.leaveType)) {
+            setError(`You already have a pending or approved leave application overlapping with the dates ${leaveFormData.startDate} to ${endDateForOverlap}. Please wait until it is processed or rejected.`);
+            setIsSubmitting(false);
+            return;
+        }
+
         try {
             const token = localStorage.getItem('authToken');
             const balanceResponse = await fetch('http://localhost:8081/api/leaves/balance', {
@@ -156,13 +189,13 @@ export default function EmployeeDashboard() {
                     'Authorization': `Bearer ${token}`
                 }
             });
-    
+
             if (!balanceResponse.ok) {
                 setError('Failed to fetch leave balance. Please try again.');
                 setIsSubmitting(false);
                 return;
             }
-    
+
             const balanceData = await balanceResponse.json();
             const sanitizedBalance = {
                 casualLeave: balanceData.casualLeave || { total: 12, used: 0, remaining: 12 },
@@ -175,37 +208,28 @@ export default function EmployeeDashboard() {
                 sanitizedBalance[key].remaining = Number(sanitizedBalance[key].remaining.toFixed(2));
             });
             setLeaveBalance(sanitizedBalance);
-    
-            // Step 3: Check if there’s enough balance
+
             const leaveTypeMap = {
                 CL: 'casualLeave',
                 EL: 'earnedLeave',
                 ML: 'maternityLeave',
                 PL: 'paternityLeave',
-                HALF_DAY: 'casualLeave'
+                HALF_DAY_CL: 'casualLeave',
+                HALF_DAY_EL: 'earnedLeave'
             };
-    
+
             const leaveKey = leaveTypeMap[leaveFormData.leaveType];
             const remainingLeaves = sanitizedBalance[leaveKey]?.remaining || 0;
-            const requiredLeaves = calculateLeaveDays(
-                leaveFormData.startDate,
-                leaveFormData.endDate,
-                leaveFormData.leaveType,
-                leaveFormData.isHalfDay
-            );
-    
-            if (remainingLeaves < requiredLeaves) {
+
+            if (remainingLeaves < leaveDays) {
                 setError(`You don’t have enough ${leaveKey.replace(/([A-Z])/g, ' $1').toLowerCase()}. Remaining: ${remainingLeaves}`);
                 setIsSubmitting(false);
                 return;
             }
-    
-            // Step 4: If balance is sufficient, send the leave application request
-            const endDate = leaveFormData.isHalfDay ? leaveFormData.startDate :
-                            (leaveFormData.leaveType === 'ML' || leaveFormData.leaveType === 'PL') ?
-                            calculateEndDate(leaveFormData.startDate, leaveFormData.leaveType) :
-                            leaveFormData.endDate;
-    
+
+            // Corrected line: Fixed the typo
+            const endDate = (leaveFormData.leaveType === 'HALF_DAY_CL' || leaveFormData.leaveType === 'HALF_DAY_EL') ? leaveFormData.startDate : leaveFormData.endDate;
+
             const response = await fetch('http://localhost:8081/api/leaves', {
                 method: 'POST',
                 headers: {
@@ -217,10 +241,10 @@ export default function EmployeeDashboard() {
                     startDate: leaveFormData.startDate,
                     endDate,
                     reason: leaveFormData.reason,
-                    isHalfDay: leaveFormData.isHalfDay
+                    isHalfDay: leaveFormData.leaveType === 'HALF_DAY_CL' || leaveFormData.leaveType === 'HALF_DAY_EL'
                 })
             });
-    
+
             if (response.ok) {
                 const newApplication = await response.json();
                 setSuccessMessage('Leave application submitted successfully!');
@@ -228,11 +252,9 @@ export default function EmployeeDashboard() {
                     leaveType: 'CL',
                     startDate: '',
                     endDate: '',
-                    reason: '',
-                    isHalfDay: false
+                    reason: ''
                 });
-    
-                // Step 5: Refresh leave balance and applications after successful submission
+
                 const balanceResponse = await fetch('http://localhost:8081/api/leaves/balance', {
                     headers: {
                         'Authorization': `Bearer ${token}`
@@ -254,7 +276,7 @@ export default function EmployeeDashboard() {
                 } else {
                     setError('Failed to refresh leave balance.');
                 }
-    
+
                 const applicationsResponse = await fetch('http://localhost:8081/api/leaves', {
                     headers: {
                         'Authorization': `Bearer ${token}`
@@ -315,7 +337,8 @@ export default function EmployeeDashboard() {
         EL: 'earnedLeave',
         ML: 'maternityLeave',
         PL: 'paternityLeave',
-        HALF_DAY: 'casualLeave'
+        HALF_DAY_CL: 'casualLeave',
+        HALF_DAY_EL: 'earnedLeave'
     };
 
     const isLeaveTypeAvailable = (leaveType) => {
@@ -332,11 +355,11 @@ export default function EmployeeDashboard() {
             <header className="bg-blue-700 text-white py-4 px-6 shadow-md">
                 <div className="max-w-7xl mx-auto flex items-center justify-between">
                     <div className="flex items-center">
-                    <img
-                        src="/Images/bisag_logo.png"
-                        alt="BISAG-N Logo"
-                        className="h-20 w-30 rounded-full"
-                    />
+                        <img
+                            src="/Images/bisag_logo.png"
+                            alt="BISAG-N Logo"
+                            className="h-20 w-30 rounded-full"
+                        />
                         <h1 className="ml-3 text-xl font-bold">BISAG-N Leave Management System</h1>
                     </div>
                     <button
@@ -485,7 +508,7 @@ export default function EmployeeDashboard() {
                                     </label>
                                     <select
                                         value={leaveFormData.leaveType}
-                                        onChange={(e) => setLeaveFormData({ ...leaveFormData, leaveType: e.target.value, isHalfDay: e.target.value === 'HALF_DAY' })}
+                                        onChange={(e) => setLeaveFormData({ ...leaveFormData, leaveType: e.target.value })}
                                         className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                         autoComplete="off"
                                     >
@@ -494,6 +517,12 @@ export default function EmployeeDashboard() {
                                         </option>
                                         <option value="EL" disabled={!isLeaveTypeAvailable('EL')}>
                                             Earned Leave (EL) {isLeaveTypeAvailable('EL') ? '' : '(Unavailable)'}
+                                        </option>
+                                        <option value="HALF_DAY_CL" disabled={!isLeaveTypeAvailable('HALF_DAY_CL')}>
+                                            Half-Day CL {isLeaveTypeAvailable('HALF_DAY_CL') ? '' : '(Unavailable)'}
+                                        </option>
+                                        <option value="HALF_DAY_EL" disabled={!isLeaveTypeAvailable('HALF_DAY_EL')}>
+                                            Half-Day EL {isLeaveTypeAvailable('HALF_DAY_EL') ? '' : '(Unavailable)'}
                                         </option>
                                         {userData?.gender === 'Female' && (
                                             <option value="ML" disabled={!isLeaveTypeAvailable('ML')}>
@@ -505,9 +534,6 @@ export default function EmployeeDashboard() {
                                                 Paternity Leave (PL) {isLeaveTypeAvailable('PL') ? '' : '(Unavailable)'}
                                             </option>
                                         )}
-                                        <option value="HALF_DAY" disabled={!isLeaveTypeAvailable('HALF_DAY')}>
-                                            Half-Day Leave {isLeaveTypeAvailable('HALF_DAY') ? '' : '(Unavailable)'}
-                                        </option>
                                     </select>
                                     {leaveBalance[leaveTypeMap[leaveFormData.leaveType]]?.remaining <= 0 && (
                                         <div className="text-red-600 text-sm mt-1">
@@ -523,11 +549,12 @@ export default function EmployeeDashboard() {
                                         type="date"
                                         value={leaveFormData.startDate}
                                         onChange={(e) => setLeaveFormData({ ...leaveFormData, startDate: e.target.value })}
+                                        min={today}
                                         className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                         autoComplete="off"
                                     />
                                 </div>
-                                {leaveFormData.leaveType !== 'ML' && leaveFormData.leaveType !== 'PL' && !leaveFormData.isHalfDay && (
+                                {(leaveFormData.leaveType !== 'HALF_DAY_CL' && leaveFormData.leaveType !== 'HALF_DAY_EL') && (
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1">
                                             End Date
@@ -536,21 +563,9 @@ export default function EmployeeDashboard() {
                                             type="date"
                                             value={leaveFormData.endDate}
                                             onChange={(e) => setLeaveFormData({ ...leaveFormData, endDate: e.target.value })}
+                                            min={leaveFormData.startDate || today}
                                             className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                             autoComplete="off"
-                                        />
-                                    </div>
-                                )}
-                                {leaveFormData.leaveType !== 'ML' && leaveFormData.leaveType !== 'PL' && (
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                                            Half-Day Leave
-                                        </label>
-                                        <input
-                                            type="checkbox"
-                                            checked={leaveFormData.isHalfDay}
-                                            onChange={(e) => setLeaveFormData({ ...leaveFormData, isHalfDay: e.target.checked, leaveType: e.target.checked ? 'HALF_DAY' : 'CL', endDate: e.target.checked ? '' : leaveFormData.endDate })}
-                                            className="h-5 w-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                                         />
                                     </div>
                                 )}
@@ -574,14 +589,21 @@ export default function EmployeeDashboard() {
                                     !isLeaveTypeAvailable(leaveFormData.leaveType) ||
                                     !leaveFormData.startDate ||
                                     !leaveFormData.reason ||
-                                    (leaveFormData.leaveType !== 'ML' &&
-                                     leaveFormData.leaveType !== 'PL' &&
-                                     !leaveFormData.isHalfDay &&
-                                     !leaveFormData.endDate)
+                                    ((leaveFormData.leaveType !== 'HALF_DAY_CL' && leaveFormData.leaveType !== 'HALF_DAY_EL') && !leaveFormData.endDate)
                                 }
-                                className="bg-blue-700 text-white py-2 pxs px-6 rounded-md hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors duration-200 disabled:bg-gray-400"
+                                className="bg-blue-700 text-white py-2 px-6 rounded-md hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors duration-200 disabled:bg-gray-400"
                             >
-                                {isSubmitting ? 'Submitting...' : 'Submit Application'}
+                                {isSubmitting ? (
+                                    <span className="flex items-center">
+                                        <svg className="animate-spin h-5 w-5 mr-2 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                                        </svg>
+                                        Submitting...
+                                    </span>
+                                ) : (
+                                    'Submit Application'
+                                )}
                             </button>
                         </div>
                     </div>
@@ -609,7 +631,7 @@ export default function EmployeeDashboard() {
                                             <tr key={application.id} className="border-b hover:bg-gray-50">
                                                 <td className="py-3 px-4">{application.leaveType}</td>
                                                 <td className="py-3 px-4">{new Date(application.startDate).toLocaleDateString()}</td>
-                                                <td className="py-3 px-4">{application.isHalfDay ? 'Half-Day' : new Date(application.endDate).toLocaleDateString()}</td>
+                                                <td className="py-3 px-4">{(application.leaveType === 'HALF_DAY_CL' || application.leaveType === 'HALF_DAY_EL') ? 'Half-Day' : new Date(application.endDate).toLocaleDateString()}</td>
                                                 <td className="py-3 px-4">
                                                     <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(application.status)}`}>
                                                         {getStatusIcon(application.status)}

@@ -41,7 +41,6 @@ public class LeaveService {
         application.setStatus("PENDING");
         application.setAppliedOn(LocalDate.now());
 
-        // Set the approver based on the user's role
         if (user.getRole().equals("HOD")) {
             User director = userService.findDirector();
             if (director == null) {
@@ -58,7 +57,6 @@ public class LeaveService {
             application.setApproverId(hod.getId());
         }
 
-        // Ensure LeaveBalance is initialized
         LeaveBalance leaveBalance = user.getLeaveBalance();
         if (leaveBalance == null) {
             leaveBalance = new LeaveBalance();
@@ -66,28 +64,63 @@ public class LeaveService {
             userRepository.save(user);
         }
 
-        // Validate paternity leave (allow only one application)
-        if (application.getLeaveType().equals("PL")) {
-            List<LeaveApplication> existingPaternityLeaves = leaveApplicationRepository.findByUser(user)
-                    .stream()
-                    .filter(la -> la.getLeaveType().equals("PL") && (la.getStatus().equals("PENDING") || la.getStatus().equals("APPROVED")))
-                    .collect(Collectors.toList());
-            if (!existingPaternityLeaves.isEmpty()) {
-                logger.warn("User {} attempted to apply for paternity leave again.", user.getId());
-                throw new RuntimeException("You have already applied for or used your paternity leave.");
+        // New validation: Check for overlapping leaves
+        LocalDate effectiveEndDate = application.getEndDate();
+        if (application.getLeaveType().equals("HALF_DAY_CL") || application.getLeaveType().equals("HALF_DAY_EL")) {
+            effectiveEndDate = application.getStartDate(); // For half-day leaves, end date is same as start date
+        }
+        List<LeaveApplication> overlappingLeaves = leaveApplicationRepository.findOverlappingLeaves(
+                user, application.getStartDate(), effectiveEndDate);
+        if (!overlappingLeaves.isEmpty()) {
+            logger.warn("User {} has overlapping leave applications for dates: {} to {}", 
+                    user.getId(), application.getStartDate(), effectiveEndDate);
+            throw new RuntimeException(
+                    "You already have a pending or approved leave application overlapping with the dates " +
+                            application.getStartDate() + " to " + effectiveEndDate + ". Please wait until it is processed or rejected.");
+        }
+
+        // Existing validation: Check for existing half-day leave on the same date
+        if (application.getLeaveType().equals("HALF_DAY_CL") || application.getLeaveType().equals("HALF_DAY_EL")) {
+            LocalDate startDate = application.getStartDate();
+            List<LeaveApplication> existingLeaves = leaveApplicationRepository.findByUserAndStartDate(user, startDate);
+            boolean hasHalfDayLeave = existingLeaves.stream()
+                    .anyMatch(leave -> (leave.getLeaveType().equals("HALF_DAY_CL") || leave.getLeaveType().equals("HALF_DAY_EL"))
+                            && (leave.getStatus().equals("PENDING") || leave.getStatus().equals("APPROVED")));
+            if (hasHalfDayLeave) {
+                logger.warn("User {} already has a half-day leave on date: {}", user.getId(), startDate);
+                throw new RuntimeException("You already have a half-day leave application (pending or approved) on " + startDate + ". Multiple half-day leaves on the same date are not allowed.");
             }
         }
 
-        // Calculate remaining leaves
         Map<String, Double> balance = calculateLeaveBalance(user);
-        String effectiveLeaveType = application.getLeaveType().equals("HALF_DAY") ? "CL" : application.getLeaveType();
+        String effectiveLeaveType = application.getLeaveType();
+        if (application.getLeaveType().equals("HALF_DAY_CL")) {
+            effectiveLeaveType = "CL";
+        } else if (application.getLeaveType().equals("HALF_DAY_EL")) {
+            effectiveLeaveType = "EL";
+        }
         double remainingLeaves = balance.getOrDefault(effectiveLeaveType, 0.0);
 
-        // Validate leave balance
         double requiredDays = calculateRequiredDays(application.getLeaveType(), application.getStartDate(), application.getEndDate(), application.isHalfDay());
+
+        // Check remaining balance for all leave types
         if (remainingLeaves < requiredDays) {
             logger.warn("Insufficient leave balance for user: {}, type: {}, remaining: {}, required: {}", user.getId(), application.getLeaveType(), remainingLeaves, requiredDays);
-            throw new RuntimeException("Insufficient " + application.getLeaveType() + " balance. Remaining: " + remainingLeaves);
+            throw new RuntimeException("Insufficient " + effectiveLeaveType + " balance. Remaining: " + remainingLeaves);
+        }
+
+        if (application.getLeaveType().equals("PL")) {
+            double totalPaternityLeaveUsed = leaveBalance.getPaternityLeaveUsed() + requiredDays;
+            if (totalPaternityLeaveUsed > 15.0) {
+                logger.warn("Total paternity leave exceeds 15 days for user: {}", user.getId());
+                throw new RuntimeException("Total paternity leave cannot exceed 15 days. You have already used " + leaveBalance.getPaternityLeaveUsed() + " days.");
+            }
+        } else if (application.getLeaveType().equals("ML")) {
+            double totalMaternityLeaveUsed = leaveBalance.getMaternityLeaveUsed() + requiredDays;
+            if (totalMaternityLeaveUsed > 182.0) {
+                logger.warn("Total maternity leave exceeds 182 days for user: {}", user.getId());
+                throw new RuntimeException("Total maternity leave cannot exceed 182 days. You have already used " + leaveBalance.getMaternityLeaveUsed() + " days.");
+            }
         }
 
         application.setRemainingLeaves(remainingLeaves);
@@ -172,14 +205,8 @@ public class LeaveService {
     }
 
     private double calculateRequiredDays(String leaveType, LocalDate startDate, LocalDate endDate, boolean isHalfDay) {
-        if (isHalfDay || leaveType.equals("HALF_DAY")) {
+        if (leaveType.equals("HALF_DAY_CL") || leaveType.equals("HALF_DAY_EL")) {
             return 0.5;
-        }
-        if (leaveType.equals("ML")) {
-            return 182.0;
-        }
-        if (leaveType.equals("PL")) {
-            return 15.0;
         }
         return ChronoUnit.DAYS.between(startDate, endDate) + 1;
     }
@@ -191,7 +218,6 @@ public class LeaveService {
                 .orElseThrow(() -> new RuntimeException("Leave application not found"));
         User currentUser = userService.getCurrentUser();
 
-        // Add null check for approverId
         Long approverId = leave.getApproverId();
         if (approverId == null) {
             logger.error("Approver ID is null for leave application ID: {}. Cannot approve.", leaveId);
@@ -213,26 +239,16 @@ public class LeaveService {
             user.setLeaveBalance(leaveBalance);
         }
 
-        if (leave.getLeaveType().equals("PL")) {
-            List<LeaveApplication> approvedPaternityLeaves = leaveApplicationRepository.findByUserIdAndStatus(user.getId(), "APPROVED")
-                    .stream()
-                    .filter(la -> la.getLeaveType().equals("PL"))
-                    .collect(Collectors.toList());
-            if (!approvedPaternityLeaves.isEmpty()) {
-                logger.warn("User {} already has an approved paternity leave.", user.getId());
-                throw new RuntimeException("Paternity leave can only be taken once.");
-            }
-        }
-
         double days = calculateRequiredDays(leave.getLeaveType(), leave.getStartDate(), leave.getEndDate(), leave.isHalfDay());
 
         switch (leave.getLeaveType()) {
             case "CL":
-            case "HALF_DAY":
+            case "HALF_DAY_CL":
                 leaveBalance.setCasualLeaveUsed(leaveBalance.getCasualLeaveUsed() + days);
                 leaveBalance.setCasualLeaveRemaining(leaveBalance.getCasualLeaveRemaining() - days);
                 break;
             case "EL":
+            case "HALF_DAY_EL":
                 leaveBalance.setEarnedLeaveUsed(leaveBalance.getEarnedLeaveUsed() + days);
                 leaveBalance.setEarnedLeaveRemaining(leaveBalance.getEarnedLeaveRemaining() - days);
                 break;
@@ -254,7 +270,13 @@ public class LeaveService {
 
         leave.setStatus("APPROVED");
         Map<String, Double> updatedBalance = calculateLeaveBalance(user);
-        leave.setRemainingLeaves(updatedBalance.getOrDefault(leave.getLeaveType(), 0.0));
+        String effectiveLeaveType = leave.getLeaveType();
+        if (leave.getLeaveType().equals("HALF_DAY_CL")) {
+            effectiveLeaveType = "CL";
+        } else if (leave.getLeaveType().equals("HALF_DAY_EL")) {
+            effectiveLeaveType = "EL";
+        }
+        leave.setRemainingLeaves(updatedBalance.getOrDefault(effectiveLeaveType, 0.0));
         leaveApplicationRepository.save(leave);
         logger.info("Leave approved for user: {}. Updated balance: {}", user.getId(), leaveBalance);
     }
@@ -266,7 +288,6 @@ public class LeaveService {
                 .orElseThrow(() -> new RuntimeException("Leave application not found"));
         User currentUser = userService.getCurrentUser();
 
-        // Add null check for approverId
         Long approverId = leave.getApproverId();
         if (approverId == null) {
             logger.error("Approver ID is null for leave application ID: {}. Cannot reject.", leaveId);

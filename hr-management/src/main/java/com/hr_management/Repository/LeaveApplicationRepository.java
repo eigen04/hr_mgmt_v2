@@ -31,7 +31,18 @@ public interface LeaveApplicationRepository extends JpaRepository<LeaveApplicati
     List<LeaveApplication> findByUserIdAndStatus(Long userId, String status);
     List<LeaveApplication> findByUserAndStatus(User user, String status);
 
-    // New method to find leave applications by approverId and status
     @Query("SELECT la FROM LeaveApplication la WHERE la.approverId = :approverId AND la.status = :status")
     List<LeaveApplication> findByApproverIdAndStatus(@Param("approverId") Long approverId, @Param("status") String status);
+
+    List<LeaveApplication> findByUserAndStartDate(@Param("user") User user, @Param("startDate") LocalDate startDate);
+
+    // New method to find overlapping leave applications for a user
+    @Query("SELECT la FROM LeaveApplication la WHERE la.user = :user " +
+           "AND la.startDate <= :endDate " +
+           "AND la.endDate >= :startDate " +
+           "AND la.status IN ('PENDING', 'APPROVED')")
+    List<LeaveApplication> findOverlappingLeaves(
+            @Param("user") User user,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate);
 }
