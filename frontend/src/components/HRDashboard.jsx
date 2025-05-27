@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import * as XLSX from 'xlsx';
 
 export default function HRDashboard() {
   const navigate = useNavigate();
@@ -151,50 +152,47 @@ export default function HRDashboard() {
       console.log('Raw employees data:', data);
 
       const formattedEmployees = data.map(employee => {
-        // Helper function to generate all dates between start and end date
         const getDatesInRange = (startDate, endDate) => {
-          console.log('Processing date range:', startDate, 'to', endDate); // Add this log
+          console.log('Processing date range:', startDate, 'to', endDate);
           const dates = [];
           let currentDate = new Date(startDate);
           const end = new Date(endDate);
           while (currentDate <= end) {
-              dates.push(`${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`);
-              currentDate.setDate(currentDate.getDate() + 1);
+            dates.push(`${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`);
+            currentDate.setDate(currentDate.getDate() + 1);
           }
           return dates;
-      };
+        };
 
-        // Map leave applications to include all dates in the range
         const mapLeaves = (applications, leaveType) => {
           return applications
-              ?.filter(app => {
-                  let normalizedLeaveType = app.leaveType.toUpperCase();
-                  // Map database leave_type to frontend expected values
-                  if (normalizedLeaveType === 'CL') normalizedLeaveType = 'CASUAL';
-                  if (normalizedLeaveType === 'EL') normalizedLeaveType = 'EARNED';
-                  if (normalizedLeaveType === 'PL') normalizedLeaveType = 'PATERNITY';
-                  if (normalizedLeaveType === 'ML') normalizedLeaveType = 'MATERNITY';
-                  if (normalizedLeaveType === 'HALF-DAY') normalizedLeaveType = 'CASUAL';
-                  return normalizedLeaveType === leaveType && app.status === 'APPROVED';
-              })
-              .flatMap(app => {
-                  const dates = getDatesInRange(app.startDate, app.endDate);
-                  return dates.map(date => ({
-                      date,
-                      isHalfDay: app.leaveType.toUpperCase() === 'HALF-DAY' ? true : app.isHalfDay,
-                  }));
-              }) || [];
-      };
+            ?.filter(app => {
+              let normalizedLeaveType = app.leaveType.toUpperCase();
+              if (normalizedLeaveType === 'PL') normalizedLeaveType = 'PATERNITY';
+              if (normalizedLeaveType === 'ML') normalizedLeaveType = 'MATERNITY';
+              return normalizedLeaveType === leaveType && app.status === 'APPROVED';
+            })
+            .flatMap(app => {
+              const dates = getDatesInRange(app.startDate, app.endDate);
+              return dates.map(date => ({
+                date,
+                isHalfDay: ['HALF_DAY_CL', 'HALF_DAY_EL'].includes(app.leaveType.toUpperCase()),
+                leaveType: app.leaveType.toUpperCase(),
+              }));
+            }) || [];
+        };
 
         return {
           id: employee.id,
           name: employee.fullName || 'Unnamed Employee',
           position: employee.role || 'Employee',
           leaves: {
-            cl: mapLeaves(employee.leaveApplications, 'CASUAL'),
-            el: mapLeaves(employee.leaveApplications, 'EARNED'),
+            cl: mapLeaves(employee.leaveApplications, 'CL'),
+            el: mapLeaves(employee.leaveApplications, 'EL'),
             maternity: mapLeaves(employee.leaveApplications, 'MATERNITY'),
             paternity: mapLeaves(employee.leaveApplications, 'PATERNITY'),
+            half_day_cl: mapLeaves(employee.leaveApplications, 'HALF_DAY_CL'),
+            half_day_el: mapLeaves(employee.leaveApplications, 'HALF_DAY_EL'),
           },
         };
       });
@@ -239,8 +237,59 @@ export default function HRDashboard() {
 
   const handleExportExcel = (deptId) => {
     const dept = departmentData.find(d => d.id === deptId);
-    if (dept) {
-      alert(`Exporting leave data for ${dept.name}`);
+    if (!dept || !employeesInDepartment.length) {
+      alert('No data available to export.');
+      return;
+    }
+
+    try {
+      const year = currentMonth.getFullYear();
+      const month = String(currentMonth.getMonth() + 1).padStart(2, '0');
+      const monthRegex = new RegExp(`^${year}-${month}`);
+
+      const reportData = employeesInDepartment.map(employee => {
+        const clCount = employee.leaves.cl?.filter(leave => monthRegex.test(leave.date)).length || 0;
+        const elCount = employee.leaves.el?.filter(leave => monthRegex.test(leave.date)).length || 0;
+        const maternityCount = employee.leaves.maternity?.filter(leave => monthRegex.test(leave.date)).length || 0;
+        const paternityCount = employee.leaves.paternity?.filter(leave => monthRegex.test(leave.date)).length || 0;
+        const halfDayClCount = employee.leaves.half_day_cl?.filter(leave => monthRegex.test(leave.date)).length || 0;
+        const halfDayElCount = employee.leaves.half_day_el?.filter(leave => monthRegex.test(leave.date)).length || 0;
+        const totalLeaves = clCount + elCount + maternityCount + paternityCount + halfDayClCount + halfDayElCount;
+
+        return {
+          'Employee Name': employee.name,
+          'Casual Leave': clCount,
+          'Earned Leave': elCount,
+          'Maternity Leave': maternityCount,
+          'Paternity Leave': paternityCount,
+          'Half Day Casual Leave': halfDayClCount,
+          'Half Day Earned Leave': halfDayElCount,
+          'Total Leaves': totalLeaves,
+        };
+      });
+
+      const worksheet = XLSX.utils.json_to_sheet(reportData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Leave Report');
+
+      // Set column widths
+      worksheet['!cols'] = [
+        { wch: 20 }, // Employee Name
+        { wch: 15 }, // Casual Leave
+        { wch: 15 }, // Earned Leave
+        { wch: 15 }, // Maternity Leave
+        { wch: 15 }, // Paternity Leave
+        { wch: 20 }, // Half Day Casual Leave
+        { wch: 20 }, // Half Day Earned Leave
+        { wch: 15 }, // Total Leaves
+      ];
+
+      const monthName = currentMonth.toLocaleString('default', { month: 'long' });
+      const fileName = `${dept.name}_Leave_Report_${monthName}_${year}.xlsx`;
+      XLSX.writeFile(workbook, fileName, { compression: true });
+    } catch (error) {
+      console.error('Error exporting Excel file:', error);
+      alert('Failed to export leave report. Please try again.');
     }
   };
 
@@ -278,8 +327,16 @@ export default function HRDashboard() {
       const elLeave = selectedEmployee.leaves.el?.find(leave => leave.date === date);
       const maternityLeave = selectedEmployee.leaves.maternity?.find(leave => leave.date === date);
       const paternityLeave = selectedEmployee.leaves.paternity?.find(leave => leave.date === date);
+      const halfDayClLeave = selectedEmployee.leaves.half_day_cl?.find(leave => leave.date === date);
+      const halfDayElLeave = selectedEmployee.leaves.half_day_el?.find(leave => leave.date === date);
 
-      if (clLeave) {
+      if (halfDayClLeave) {
+        leaveType = 'half_day_cl';
+        isHalfDay = halfDayClLeave.isHalfDay;
+      } else if (halfDayElLeave) {
+        leaveType = 'half_day_el';
+        isHalfDay = halfDayElLeave.isHalfDay;
+      } else if (clLeave) {
         leaveType = 'cl';
         isHalfDay = clLeave.isHalfDay;
       } else if (elLeave) {
@@ -305,23 +362,25 @@ export default function HRDashboard() {
     const year = currentMonth.getFullYear();
 
     const getLeaveColor = (type, isHalfDay) => {
-      if (isHalfDay) return 'bg-purple-100 border-purple-400 text-purple-800';
       switch(type) {
         case 'cl': return 'bg-yellow-100 border-yellow-400 text-yellow-800';
         case 'el': return 'bg-green-100 border-green-400 text-green-800';
         case 'maternity': return 'bg-pink-100 border-pink-400 text-pink-800';
         case 'paternity': return 'bg-blue-100 border-blue-400 text-blue-800';
+        case 'half_day_cl': return 'bg-orange-100 border-orange-400 text-orange-800';
+        case 'half_day_el': return 'bg-teal-100 border-teal-400 text-teal-800';
         default: return 'bg-white hover:bg-gray-50';
       }
     };
 
     const getLeaveTooltip = (type, isHalfDay) => {
-      if (isHalfDay) return 'Half Day';
       switch(type) {
         case 'cl': return 'Casual Leave';
         case 'el': return 'Earned Leave';
         case 'maternity': return 'Maternity Leave';
         case 'paternity': return 'Paternity Leave';
+        case 'half_day_cl': return 'Half Day Casual Leave';
+        case 'half_day_el': return 'Half Day Earned Leave';
         default: return '';
       }
     };
@@ -331,7 +390,8 @@ export default function HRDashboard() {
       { type: 'el', label: 'Earned Leave', bgColor: 'bg-green-100', borderColor: 'border-green-400' },
       { type: 'maternity', label: 'Maternity Leave', bgColor: 'bg-pink-100', borderColor: 'border-pink-400' },
       { type: 'paternity', label: 'Paternity Leave', bgColor: 'bg-blue-100', borderColor: 'border-blue-400' },
-      { type: 'halfDay', label: 'Half Day', bgColor: 'bg-purple-100', borderColor: 'border-purple-400' },
+      { type: 'half_day_cl', label: 'Half Day Casual Leave', bgColor: 'bg-orange-100', borderColor: 'border-orange-400' },
+      { type: 'half_day_el', label: 'Half Day Earned Leave', bgColor: 'bg-teal-100', borderColor: 'border-teal-400' },
     ];
 
     const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];

@@ -31,17 +31,28 @@ public class LeaveController {
     private UserService userService;
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('EMPLOYEE', 'HOD')") // Allow both EMPLOYEE and HOD to apply for leave
+    @PreAuthorize("hasAnyRole('EMPLOYEE', 'HOD')")
     public ResponseEntity<?> applyLeave(@RequestBody LeaveApplication application) {
         try {
+            // Validate leave type
+            String leaveType = application.getLeaveType();
+            if (!leaveType.equals("CL") && !leaveType.equals("EL") && !leaveType.equals("ML") && !leaveType.equals("PL") &&
+                !leaveType.equals("HALF_DAY_CL") && !leaveType.equals("HALF_DAY_EL") && !leaveType.equals("LWP") && !leaveType.equals("HALF_DAY_LWP")) {
+                logger.warn("Invalid leave type: {}", leaveType);
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Collections.singletonMap("message", "Invalid leave type: " + leaveType + ". Supported types are: CL, EL, ML, PL, HALF_DAY_CL, HALF_DAY_EL, LWP, HALF_DAY_LWP."));
+            }
+
             LeaveApplication savedApplication = leaveService.applyLeave(application);
             return ResponseEntity.ok(savedApplication);
         } catch (RuntimeException e) {
+            logger.warn("Failed to apply leave: {}", e.getMessage());
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(Collections.singletonMap("message", e.getMessage()));
         } catch (Exception e) {
+            logger.error("Unexpected error applying leave: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Collections.singletonMap("message", "An error occurred: " + e.getMessage()));
+                    .body(Collections.singletonMap("message", "An unexpected error occurred while applying the leave: " + e.getMessage()));
         }
     }
 

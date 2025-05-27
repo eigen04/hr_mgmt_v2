@@ -8,7 +8,8 @@ export default function EmployeeDashboard() {
         casualLeave: { total: 12, used: 0, remaining: 12 },
         earnedLeave: { total: 20, used: 0, remaining: 20 },
         maternityLeave: { total: 182, used: 0, remaining: 182 },
-        paternityLeave: { total: 15, used: 0, remaining: 15 }
+        paternityLeave: { total: 15, used: 0, remaining: 15 },
+        leaveWithoutPay: { total: 300, used: 0, remaining: 300 }
     });
     const [leaveApplications, setLeaveApplications] = useState([]);
     const [leaveFormData, setLeaveFormData] = useState({
@@ -17,13 +18,14 @@ export default function EmployeeDashboard() {
         endDate: '',
         reason: ''
     });
+    const [leaveDays, setLeaveDays] = useState(0);
     const [error, setError] = useState('');
     const [successMessage, setSuccessMessage] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const navigate = useNavigate();
 
-    // Current date for validation (May 20, 2025)
-    const today = new Date('2025-05-20').toISOString().split('T')[0];
+    // Use current date dynamically (May 26, 2025)
+    const today = new Date().toISOString().split('T')[0]; // 2025-05-26
 
     useEffect(() => {
         const fetchUserData = async () => {
@@ -72,11 +74,12 @@ export default function EmployeeDashboard() {
                         casualLeave: balanceData.casualLeave || { total: 12, used: 0, remaining: 12 },
                         earnedLeave: balanceData.earnedLeave || { total: 20, used: 0, remaining: 20 },
                         maternityLeave: balanceData.maternityLeave || { total: 182, used: 0, remaining: 182 },
-                        paternityLeave: balanceData.paternityLeave || { total: 15, used: 0, remaining: 15 }
+                        paternityLeave: balanceData.paternityLeave || { total: 15, used: 0, remaining: 15 },
+                        leaveWithoutPay: balanceData.leaveWithoutPay || { total: 300, used: 0, remaining: 300 }
                     };
                     Object.keys(sanitizedBalance).forEach((key) => {
-                        sanitizedBalance[key].used = Number(sanitizedBalance[key].used.toFixed(2));
-                        sanitizedBalance[key].remaining = Number(sanitizedBalance[key].remaining.toFixed(2));
+                        sanitizedBalance[key].used = Number(sanitizedBalance[key].used.toFixed(1));
+                        sanitizedBalance[key].remaining = Number(sanitizedBalance[key].remaining.toFixed(1));
                     });
                     setLeaveBalance(sanitizedBalance);
                 } else {
@@ -110,36 +113,124 @@ export default function EmployeeDashboard() {
         navigate('/');
     };
 
-    const calculateLeaveDays = (startDate, endDate, leaveType) => {
-        if (leaveType === 'HALF_DAY_CL' || leaveType === 'HALF_DAY_EL') return 0.5;
-        if (!endDate) return 1;
-        const start = new Date(startDate);
-        const end = new Date(endDate);
-        const diffTime = Math.abs(end - start);
-        return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    const isNonWorkingDay = (date) => {
+        const day = new Date(date);
+        if (isNaN(day.getTime())) return false; // Invalid date
+        const dayOfWeek = day.getDay(); // 0 = Sunday, 6 = Saturday
+        if (dayOfWeek === 0) return true; // Sunday
+        if (dayOfWeek === 6) {
+            // Check for second or fourth Saturday
+            const dayOfMonth = day.getDate();
+            const weekOfMonth = Math.floor((dayOfMonth - 1) / 7) + 1;
+            return weekOfMonth === 2 || weekOfMonth === 4;
+        }
+        return false;
     };
 
-    // Function to check for overlapping leaves
-    const hasOverlappingLeaves = (startDate, endDate, leaveType) => {
-        const newStart = new Date(startDate);
-        const newEnd = (leaveType === 'HALF_DAY_CL' || leaveType === 'HALF_DAY_EL') ? new Date(startDate) : new Date(endDate);
+    const calculateLeaveDays = (startDate, endDate, leaveType) => {
+        const start = new Date(startDate);
+        if (isNaN(start.getTime())) return 0; // Invalid start date
 
-        return leaveApplications.some((application) => {
-            if (application.status === 'REJECTED') return false; // Ignore rejected leaves
+        if (leaveType === 'HALF_DAY_CL' || leaveType === 'HALF_DAY_EL' || leaveType === 'HALF_DAY_LWP') {
+            if (isNonWorkingDay(startDate)) {
+                return 0; // Will trigger error in validation
+            }
+            return 0.5;
+        }
+        if (leaveType === 'ML') {
+            return 182; // Fixed 182 days for maternity leave
+        }
+        if (leaveType === 'PL') {
+            return 15; // Fixed 15 days for paternity leave
+        }
+        if (!endDate) return 0;
+
+        const end = new Date(endDate);
+        if (isNaN(end.getTime())) return 0; // Invalid end date
+
+        let currentDate = new Date(startDate);
+        let days = 0;
+
+        // For EL, ML, PL, and LWP, count all days including holidays
+        const countHolidays = leaveType === 'EL' || leaveType === 'ML' || leaveType === 'PL' || leaveType === 'LWP';
+
+        while (currentDate <= end) {
+            if (countHolidays || !isNonWorkingDay(currentDate)) {
+                days += 1; // Count all days for EL, ML, PL, LWP; only working days for CL
+            }
+            currentDate.setDate(currentDate.getDate() + 1);
+        }
+        return days;
+    };
+
+    const calculateEndDate = (startDate, leaveType) => {
+        if (!startDate) return '';
+        const start = new Date(startDate);
+        if (isNaN(start.getTime())) return ''; // Invalid date
+        if (leaveType === 'ML') {
+            start.setDate(start.getDate() + 181); // 182 days total (start + 181)
+        } else if (leaveType === 'PL') {
+            start.setDate(start.getDate() + 14); // 15 days total (start + 14)
+        } else {
+            return leaveFormData.endDate; // Return existing end date for other leave types
+        }
+        return start.toISOString().split('T')[0];
+    };
+
+    const hasOverlappingLeaves = (startDate, endDate, leaveType) => {
+        const start = new Date(startDate);
+        if (isNaN(start.getTime())) return false; // Invalid start date
+        const newStart = start;
+        const newEnd = (leaveType === 'HALF_DAY_CL' || leaveType === 'HALF_DAY_EL' || leaveType === 'HALF_DAY_LWP') ? new Date(startDate) : new Date(endDate);
+        if (isNaN(newEnd.getTime())) return false; // Invalid end date
+
+        const overlapping = leaveApplications.some((application) => {
+            if (application.status === 'REJECTED') return false;
 
             const existingStart = new Date(application.startDate);
-            const existingEnd = (application.leaveType === 'HALF_DAY_CL' || application.leaveType === 'HALF_DAY_EL') 
-                ? new Date(application.startDate) 
+            const existingEnd = (application.leaveType === 'HALF_DAY_CL' || application.leaveType === 'HALF_DAY_EL' || application.leaveType === 'HALF_DAY_LWP')
+                ? new Date(application.startDate)
                 : new Date(application.endDate);
 
-            return existingStart <= newEnd && existingEnd >= newStart;
+            if (isNaN(existingStart.getTime()) || isNaN(existingEnd.getTime())) return false;
+
+            const isOverlapping = existingStart <= newEnd && existingEnd >= newStart;
+            if (isOverlapping) {
+                console.log(`Overlap detected with application: ${application.leaveType} from ${application.startDate} to ${application.endDate}, Status: ${application.status}`);
+            }
+            return isOverlapping;
         });
+
+        return overlapping;
     };
+
+    useEffect(() => {
+        if (leaveFormData.startDate && (leaveFormData.leaveType === 'ML' || leaveFormData.leaveType === 'PL')) {
+            const calculatedEndDate = calculateEndDate(leaveFormData.startDate, leaveFormData.leaveType);
+            setLeaveFormData((prev) => ({ ...prev, endDate: calculatedEndDate }));
+        }
+        if (leaveFormData.startDate) {
+            const days = calculateLeaveDays(
+                leaveFormData.startDate,
+                leaveFormData.endDate,
+                leaveFormData.leaveType
+            );
+            setLeaveDays(days);
+        } else {
+            setLeaveDays(0);
+        }
+    }, [leaveFormData.startDate, leaveFormData.endDate, leaveFormData.leaveType]);
 
     const handleLeaveSubmit = async () => {
         setIsSubmitting(true);
         setError('');
         setSuccessMessage('');
+
+        if (leaveFormData.startDate && leaveFormData.startDate < today) {
+            setError('Start date cannot be in the past');
+            setIsSubmitting(false);
+            return;
+        }
 
         if (!leaveFormData.startDate || !leaveFormData.reason) {
             setError('Please fill all required fields');
@@ -147,7 +238,7 @@ export default function EmployeeDashboard() {
             return;
         }
 
-        if (leaveFormData.leaveType !== 'HALF_DAY_CL' && leaveFormData.leaveType !== 'HALF_DAY_EL' && !leaveFormData.endDate) {
+        if (leaveFormData.leaveType !== 'HALF_DAY_CL' && leaveFormData.leaveType !== 'HALF_DAY_EL' && leaveFormData.leaveType !== 'HALF_DAY_LWP' && leaveFormData.leaveType !== 'ML' && leaveFormData.leaveType !== 'PL' && !leaveFormData.endDate) {
             setError('Please provide an end date');
             setIsSubmitting(false);
             return;
@@ -159,55 +250,38 @@ export default function EmployeeDashboard() {
             return;
         }
 
+        if ((leaveFormData.leaveType === 'HALF_DAY_CL' || leaveFormData.leaveType === 'HALF_DAY_EL' || leaveFormData.leaveType === 'HALF_DAY_LWP') && isNonWorkingDay(leaveFormData.startDate)) {
+            setError('Half-day leave cannot be applied on a non-working day (second/fourth Saturday or Sunday)');
+            setIsSubmitting(false);
+            return;
+        }
+
         const leaveDays = calculateLeaveDays(leaveFormData.startDate, leaveFormData.endDate, leaveFormData.leaveType);
 
-        if (leaveFormData.leaveType === 'ML' && leaveDays > 182) {
-            setError('Maternity leave cannot exceed 182 days');
-            setIsSubmitting(false);
-            return;
-        }
-        if (leaveFormData.leaveType === 'PL' && leaveDays > 15) {
-            setError('Paternity leave cannot exceed 15 days');
+        if (leaveDays === 0) {
+            setError('No working days selected for leave');
             setIsSubmitting(false);
             return;
         }
 
-        // Validation: Check for overlapping leaves on the frontend
-        const endDateForOverlap = (leaveFormData.leaveType === 'HALF_DAY_CL' || leaveFormData.leaveType === 'HALF_DAY_EL') 
-            ? leaveFormData.startDate 
+        const endDateForOverlap = (leaveFormData.leaveType === 'HALF_DAY_CL' || leaveFormData.leaveType === 'HALF_DAY_EL' || leaveFormData.leaveType === 'HALF_DAY_LWP')
+            ? leaveFormData.startDate
             : leaveFormData.endDate;
         if (hasOverlappingLeaves(leaveFormData.startDate, endDateForOverlap, leaveFormData.leaveType)) {
-            setError(`You already have a pending or approved leave application overlapping with the dates ${leaveFormData.startDate} to ${endDateForOverlap}. Please wait until it is processed or rejected.`);
+            setError(`You already have a pending or approved leave application overlapping with the dates ${leaveFormData.startDate} to ${endDateForOverlap}. Please check your existing applications and wait until they are processed or rejected.`);
             setIsSubmitting(false);
             return;
         }
 
         try {
             const token = localStorage.getItem('authToken');
-            const balanceResponse = await fetch('http://localhost:8081/api/leaves/balance', {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
-
-            if (!balanceResponse.ok) {
-                setError('Failed to fetch leave balance. Please try again.');
+            if (!token) {
+                setError('Session expired. Please log in again.');
+                localStorage.removeItem('authToken');
+                navigate('/');
                 setIsSubmitting(false);
                 return;
             }
-
-            const balanceData = await balanceResponse.json();
-            const sanitizedBalance = {
-                casualLeave: balanceData.casualLeave || { total: 12, used: 0, remaining: 12 },
-                earnedLeave: balanceData.earnedLeave || { total: 20, used: 0, remaining: 20 },
-                maternityLeave: balanceData.maternityLeave || { total: 182, used: 0, remaining: 182 },
-                paternityLeave: balanceData.paternityLeave || { total: 15, used: 0, remaining: 15 }
-            };
-            Object.keys(sanitizedBalance).forEach((key) => {
-                sanitizedBalance[key].used = Number(sanitizedBalance[key].used.toFixed(2));
-                sanitizedBalance[key].remaining = Number(sanitizedBalance[key].remaining.toFixed(2));
-            });
-            setLeaveBalance(sanitizedBalance);
 
             const leaveTypeMap = {
                 CL: 'casualLeave',
@@ -215,11 +289,13 @@ export default function EmployeeDashboard() {
                 ML: 'maternityLeave',
                 PL: 'paternityLeave',
                 HALF_DAY_CL: 'casualLeave',
-                HALF_DAY_EL: 'earnedLeave'
+                HALF_DAY_EL: 'earnedLeave',
+                LWP: 'leaveWithoutPay',
+                HALF_DAY_LWP: 'leaveWithoutPay'
             };
 
             const leaveKey = leaveTypeMap[leaveFormData.leaveType];
-            const remainingLeaves = sanitizedBalance[leaveKey]?.remaining || 0;
+            const remainingLeaves = leaveBalance[leaveKey]?.remaining || 0;
 
             if (remainingLeaves < leaveDays) {
                 setError(`You don’t have enough ${leaveKey.replace(/([A-Z])/g, ' $1').toLowerCase()}. Remaining: ${remainingLeaves}`);
@@ -227,8 +303,9 @@ export default function EmployeeDashboard() {
                 return;
             }
 
-            // Corrected line: Fixed the typo
-            const endDate = (leaveFormData.leaveType === 'HALF_DAY_CL' || leaveFormData.leaveType === 'HALF_DAY_EL') ? leaveFormData.startDate : leaveFormData.endDate;
+            const endDate = (leaveFormData.leaveType === 'HALF_DAY_CL' || leaveFormData.leaveType === 'HALF_DAY_EL' || leaveFormData.leaveType === 'HALF_DAY_LWP')
+                ? leaveFormData.startDate
+                : leaveFormData.endDate;
 
             const response = await fetch('http://localhost:8081/api/leaves', {
                 method: 'POST',
@@ -241,7 +318,7 @@ export default function EmployeeDashboard() {
                     startDate: leaveFormData.startDate,
                     endDate,
                     reason: leaveFormData.reason,
-                    isHalfDay: leaveFormData.leaveType === 'HALF_DAY_CL' || leaveFormData.leaveType === 'HALF_DAY_EL'
+                    isHalfDay: leaveFormData.leaveType === 'HALF_DAY_CL' || leaveFormData.leaveType === 'HALF_DAY_EL' || leaveFormData.leaveType === 'HALF_DAY_LWP'
                 })
             });
 
@@ -254,7 +331,9 @@ export default function EmployeeDashboard() {
                     endDate: '',
                     reason: ''
                 });
+                setLeaveDays(0);
 
+                // Refresh leave balance and applications
                 const balanceResponse = await fetch('http://localhost:8081/api/leaves/balance', {
                     headers: {
                         'Authorization': `Bearer ${token}`
@@ -266,11 +345,12 @@ export default function EmployeeDashboard() {
                         casualLeave: balanceData.casualLeave || { total: 12, used: 0, remaining: 12 },
                         earnedLeave: balanceData.earnedLeave || { total: 20, used: 0, remaining: 20 },
                         maternityLeave: balanceData.maternityLeave || { total: 182, used: 0, remaining: 182 },
-                        paternityLeave: balanceData.paternityLeave || { total: 15, used: 0, remaining: 15 }
+                        paternityLeave: balanceData.paternityLeave || { total: 15, used: 0, remaining: 15 },
+                        leaveWithoutPay: balanceData.leaveWithoutPay || { total: 300, used: 0, remaining: 300 }
                     };
                     Object.keys(sanitizedBalance).forEach((key) => {
-                        sanitizedBalance[key].used = Number(sanitizedBalance[key].used.toFixed(2));
-                        sanitizedBalance[key].remaining = Number(sanitizedBalance[key].remaining.toFixed(2));
+                        sanitizedBalance[key].used = Number(sanitizedBalance[key].used.toFixed(1));
+                        sanitizedBalance[key].remaining = Number(sanitizedBalance[key].remaining.toFixed(1));
                     });
                     setLeaveBalance(sanitizedBalance);
                 } else {
@@ -289,6 +369,13 @@ export default function EmployeeDashboard() {
                     setError('Failed to refresh leave applications.');
                 }
             } else {
+                if (response.status === 401) {
+                    setError('Session expired. Please log in again.');
+                    localStorage.removeItem('authToken');
+                    navigate('/');
+                    setIsSubmitting(false);
+                    return;
+                }
                 let errorMessage = 'Failed to submit leave application';
                 try {
                     const errorData = await response.json();
@@ -338,7 +425,9 @@ export default function EmployeeDashboard() {
         ML: 'maternityLeave',
         PL: 'paternityLeave',
         HALF_DAY_CL: 'casualLeave',
-        HALF_DAY_EL: 'earnedLeave'
+        HALF_DAY_EL: 'earnedLeave',
+        LWP: 'leaveWithoutPay',
+        HALF_DAY_LWP: 'leaveWithoutPay'
     };
 
     const isLeaveTypeAvailable = (leaveType) => {
@@ -387,7 +476,7 @@ export default function EmployeeDashboard() {
                             <User className="w-8 h-8 text-purple-500" />
                         </div>
                         <div className="flex justify-between items-center">
-                            <span className="text-gray-600">Total Remaining Leaves</span>
+                            <span className="text-gray-600">Total Remaining Leaves (CL + EL)</span>
                             <span className="font-bold text-xl text-green-600">{totalRemainingLeaves}</span>
                         </div>
                     </div>
@@ -435,7 +524,7 @@ export default function EmployeeDashboard() {
                             </div>
                         </div>
 
-                        {userData?.gender === 'Female' && (
+                        {userData?.gender?.toUpperCase() === 'FEMALE' && (
                             <div className="bg-white rounded-lg shadow-lg p-6">
                                 <div className="flex items-center justify-between mb-4">
                                     <h3 className="text-lg font-semibold text-gray-700">Maternity Leave (ML)</h3>
@@ -448,17 +537,17 @@ export default function EmployeeDashboard() {
                                     </div>
                                     <div className="flex justify-between items-center">
                                         <span className="text-gray-600">Used</span>
-                                        <span className="font-bold text-xl text-red-600">{leaveBalance.maternityLeave.used}</span>
+                                        <span className="font-bold text-xl text-red-600">{leaveBalance.maternityLeave.used.toFixed(1)}</span>
                                     </div>
                                     <div className="flex justify-between items-center">
                                         <span className="text-gray-600">Remaining</span>
-                                        <span className="font-bold text-xl text-green-600">{leaveBalance.maternityLeave.remaining}</span>
+                                        <span className="font-bold text-xl text-green-600">{leaveBalance.maternityLeave.remaining.toFixed(1)}</span>
                                     </div>
                                 </div>
                             </div>
                         )}
 
-                        {userData?.gender === 'Male' && (
+                        {userData?.gender?.toUpperCase() === 'MALE' && (
                             <div className="bg-white rounded-lg shadow-lg p-6">
                                 <div className="flex items-center justify-between mb-4">
                                     <h3 className="text-lg font-semibold text-gray-700">Paternity Leave (PL)</h3>
@@ -471,15 +560,36 @@ export default function EmployeeDashboard() {
                                     </div>
                                     <div className="flex justify-between items-center">
                                         <span className="text-gray-600">Used</span>
-                                        <span className="font-bold text-xl text-red-600">{leaveBalance.paternityLeave.used}</span>
+                                        <span className="font-bold text-xl text-red-600">{leaveBalance.paternityLeave.used.toFixed(1)}</span>
                                     </div>
                                     <div className="flex justify-between items-center">
                                         <span className="text-gray-600">Remaining</span>
-                                        <span className="font-bold text-xl text-green-600">{leaveBalance.paternityLeave.remaining}</span>
+                                        <span className="font-bold text-xl text-green-600">{leaveBalance.paternityLeave.remaining.toFixed(1)}</span>
                                     </div>
                                 </div>
                             </div>
                         )}
+
+                        <div className="bg-white rounded-lg shadow-lg p-6">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-lg font-semibold text-gray-700">Leave Without Pay (LWP)</h3>
+                                <Calendar className="w-8 h-8 text-gray-500" />
+                            </div>
+                            <div className="space-y-3">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-gray-600">Total Annual</span>
+                                    <span className="font-bold text-xl">{leaveBalance.leaveWithoutPay.total}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-gray-600">Used</span>
+                                    <span className="font-bold text-xl text-red-600">{leaveBalance.leaveWithoutPay.used.toFixed(1)}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-gray-600">Remaining</span>
+                                    <span className="font-bold text-xl text-green-600">{leaveBalance.leaveWithoutPay.remaining.toFixed(1)}</span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <div className="bg-white rounded-lg shadow-lg p-6 mb-8">
@@ -508,15 +618,15 @@ export default function EmployeeDashboard() {
                                     </label>
                                     <select
                                         value={leaveFormData.leaveType}
-                                        onChange={(e) => setLeaveFormData({ ...leaveFormData, leaveType: e.target.value })}
-                                        className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                        onChange={(e) => setLeaveFormData({ ...leaveFormData, leaveType: e.target.value, endDate: '' })}
+                                        className="flex w-full h-10 px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder:text-gray-400 disabled:bg-gray-100 disabled:cursor-not-allowed"
                                         autoComplete="off"
                                     >
                                         <option value="CL" disabled={!isLeaveTypeAvailable('CL')}>
-                                            Casual Leave (CL) {isLeaveTypeAvailable('CL') ? '' : '(Unavailable)'}
+                                            Casual Leave {isLeaveTypeAvailable('CL') ? '' : '(Unavailable)'}
                                         </option>
                                         <option value="EL" disabled={!isLeaveTypeAvailable('EL')}>
-                                            Earned Leave (EL) {isLeaveTypeAvailable('EL') ? '' : '(Unavailable)'}
+                                            Earned Leave {isLeaveTypeAvailable('EL') ? '' : '(Unavailable)'}
                                         </option>
                                         <option value="HALF_DAY_CL" disabled={!isLeaveTypeAvailable('HALF_DAY_CL')}>
                                             Half-Day CL {isLeaveTypeAvailable('HALF_DAY_CL') ? '' : '(Unavailable)'}
@@ -524,16 +634,22 @@ export default function EmployeeDashboard() {
                                         <option value="HALF_DAY_EL" disabled={!isLeaveTypeAvailable('HALF_DAY_EL')}>
                                             Half-Day EL {isLeaveTypeAvailable('HALF_DAY_EL') ? '' : '(Unavailable)'}
                                         </option>
-                                        {userData?.gender === 'Female' && (
+                                        {userData?.gender?.toUpperCase() === 'FEMALE' && (
                                             <option value="ML" disabled={!isLeaveTypeAvailable('ML')}>
-                                                Maternity Leave (ML) {isLeaveTypeAvailable('ML') ? '' : '(Unavailable)'}
+                                                Maternity Leave {isLeaveTypeAvailable('ML') ? '' : '(Unavailable)'}
                                             </option>
                                         )}
-                                        {userData?.gender === 'Male' && (
+                                        {userData?.gender?.toUpperCase() === 'MALE' && (
                                             <option value="PL" disabled={!isLeaveTypeAvailable('PL')}>
-                                                Paternity Leave (PL) {isLeaveTypeAvailable('PL') ? '' : '(Unavailable)'}
+                                                Paternity Leave {isLeaveTypeAvailable('PL') ? '' : '(Unavailable)'}
                                             </option>
                                         )}
+                                        <option value="LWP" disabled={!isLeaveTypeAvailable('LWP')}>
+                                            Leave Without Pay (LWP) {isLeaveTypeAvailable('LWP') ? '' : '(Unavailable)'}
+                                        </option>
+                                        <option value="HALF_DAY_LWP" disabled={!isLeaveTypeAvailable('HALF_DAY_LWP')}>
+                                            Half-Day LWP {isLeaveTypeAvailable('HALF_DAY_LWP') ? '' : '(Unavailable)'}
+                                        </option>
                                     </select>
                                     {leaveBalance[leaveTypeMap[leaveFormData.leaveType]]?.remaining <= 0 && (
                                         <div className="text-red-600 text-sm mt-1">
@@ -550,11 +666,17 @@ export default function EmployeeDashboard() {
                                         value={leaveFormData.startDate}
                                         onChange={(e) => setLeaveFormData({ ...leaveFormData, startDate: e.target.value })}
                                         min={today}
-                                        className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                        className={`flex w-full h-10 px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder:text-gray-400 ${leaveFormData.startDate && leaveFormData.startDate < today ? 'border-red-500 bg-red-50' : ''}`}
                                         autoComplete="off"
+                                        required
                                     />
+                                    {leaveFormData.startDate && leaveFormData.startDate < today && (
+                                        <div className="text-red-600 text-sm mt-1">
+                                            Past dates are not allowed.
+                                        </div>
+                                    )}
                                 </div>
-                                {(leaveFormData.leaveType !== 'HALF_DAY_CL' && leaveFormData.leaveType !== 'HALF_DAY_EL') && (
+                                {(leaveFormData.leaveType !== 'HALF_DAY_CL' && leaveFormData.leaveType !== 'HALF_DAY_EL' && leaveFormData.leaveType !== 'HALF_DAY_LWP' && leaveFormData.leaveType !== 'ML' && leaveFormData.leaveType !== 'PL') && (
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1">
                                             End Date
@@ -564,9 +686,32 @@ export default function EmployeeDashboard() {
                                             value={leaveFormData.endDate}
                                             onChange={(e) => setLeaveFormData({ ...leaveFormData, endDate: e.target.value })}
                                             min={leaveFormData.startDate || today}
-                                            className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            className={`flex w-full h-10 px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder:text-gray-400 ${leaveFormData.endDate && leaveFormData.startDate && leaveFormData.endDate < leaveFormData.startDate ? 'border-red-500 bg-red-50' : ''}`}
+                                            autoComplete="off"
+                                            required
+                                        />
+                                        {leaveFormData.endDate && leaveFormData.startDate && leaveFormData.endDate < leaveFormData.startDate && (
+                                            <div className="text-red-600 text-sm mt-1">
+                                                End date cannot be before start date.
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                                {(leaveFormData.leaveType === 'ML' || leaveFormData.leaveType === 'PL') && (
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            End Date
+                                        </label>
+                                        <input
+                                            type="date"
+                                            value={leaveFormData.endDate}
+                                            readOnly
+                                            className="flex w-full h-10 px-3 py-2 text-sm border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed"
                                             autoComplete="off"
                                         />
+                                        <p className="text-sm text-gray-600 mt-1">
+                                            {leaveFormData.leaveType === 'ML' ? 'Maternity leave is fixed at 182 days.' : 'Paternity leave is fixed at 15 days.'}
+                                        </p>
                                     </div>
                                 )}
                                 <div className="md:col-span-2">
@@ -577,10 +722,15 @@ export default function EmployeeDashboard() {
                                         value={leaveFormData.reason}
                                         onChange={(e) => setLeaveFormData({ ...leaveFormData, reason: e.target.value })}
                                         rows="3"
-                                        className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                        className="flex w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder:text-gray-400"
                                         autoComplete="off"
                                     ></textarea>
                                 </div>
+                            </div>
+                            <div className="mb-4">
+                                <p className="text-sm text-gray-600">
+                                    Total leave days (excluding second/fourth Saturdays and Sundays for CL): <span className="font-bold">{leaveDays.toFixed(1)}</span>
+                                </p>
                             </div>
                             <button
                                 onClick={handleLeaveSubmit}
@@ -589,9 +739,12 @@ export default function EmployeeDashboard() {
                                     !isLeaveTypeAvailable(leaveFormData.leaveType) ||
                                     !leaveFormData.startDate ||
                                     !leaveFormData.reason ||
-                                    ((leaveFormData.leaveType !== 'HALF_DAY_CL' && leaveFormData.leaveType !== 'HALF_DAY_EL') && !leaveFormData.endDate)
+                                    ((leaveFormData.leaveType !== 'HALF_DAY_CL' && leaveFormData.leaveType !== 'HALF_DAY_EL' && leaveFormData.leaveType !== 'HALF_DAY_LWP' && leaveFormData.leaveType !== 'ML' && leaveFormData.leaveType !== 'PL') && !leaveFormData.endDate) ||
+                                    (leaveFormData.startDate && leaveFormData.startDate < today) ||
+                                    (leaveFormData.endDate && leaveFormData.startDate && leaveFormData.endDate < leaveFormData.startDate && leaveFormData.leaveType !== 'ML' && leaveFormData.leaveType !== 'PL') ||
+                                    leaveDays === 0
                                 }
-                                className="bg-blue-700 text-white py-2 px-6 rounded-md hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors duration-200 disabled:bg-gray-400"
+                                className="bg-blue-600 text-white font-semibold py-2 px-6 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
                             >
                                 {isSubmitting ? (
                                     <span className="flex items-center">
@@ -608,43 +761,55 @@ export default function EmployeeDashboard() {
                         </div>
                     </div>
 
-                    <div className="bg-white rounded-lg shadow-lg p-6">
-                        <h3 className="text-lg font-semibold text-gray-700 mb-4 flex items-center">
-                            <CalendarClock className="w-5 h-5 mr-2" />
+                    <div className="bg-white rounded-lg shadow p-4">
+                        <h3 className="text-lg font-semibold text-gray-700 mb-3 flex items-center">
+                            <CalendarClock className="mr-2 h-6 w-4" />
                             Leave Application Status
                         </h3>
                         <div className="overflow-x-auto">
-                            <table className="w-full">
+                            <table className="w-full min-w-[600px]">
                                 <thead>
                                     <tr className="border-b">
-                                        <th className="text-left py-3 px-4 font-medium text-gray-700">Type</th>
-                                        <th className="text-left py-3 px-4 font-medium text-gray-700">Start Date</th>
-                                        <th className="text-left py-3 px-4 font-medium text-gray-700">End Date</th>
-                                        <th className="text-left py-3 px-4 font-medium text-gray-700">Status</th>
-                                        <th className="text-left py-3 px-4 font-medium text-gray-700">Applied On</th>
-                                        <th className="text-left py-3 px-4 font-medium text-gray-700">Remaining Leaves</th>
+                                        <th className="px-6 py-4 text-left text-sm font-medium text-gray-700">Type</th>
+                                        <th className="px-6 py-4 text-left text-sm font-medium text-gray-700">Start Date</th>
+                                        <th className="px-6 py-4 text-left text-sm font-medium">End Date</th>
+                                        <th className="px-2 py-4 text-left text-sm font-medium">Status</th>
+                                        <th className="px-10 py-4 text-left text-sm font-medium">Applied On</th>
+                                        <th className="px-6 text-left text-sm font-medium">Remaining</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {leaveApplications.length > 0 ? (
                                         leaveApplications.map((application) => (
                                             <tr key={application.id} className="border-b hover:bg-gray-50">
-                                                <td className="py-3 px-4">{application.leaveType}</td>
-                                                <td className="py-3 px-4">{new Date(application.startDate).toLocaleDateString()}</td>
-                                                <td className="py-3 px-4">{(application.leaveType === 'HALF_DAY_CL' || application.leaveType === 'HALF_DAY_EL') ? 'Half-Day' : new Date(application.endDate).toLocaleDateString()}</td>
-                                                <td className="py-3 px-4">
-                                                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(application.status)}`}>
+                                                <td className="px-6 py-4 text-sm">{application.leaveType || 'N/A'}</td>
+                                                <td className="px-2 py-4 text-sm">
+                                                    {application.startDate ? new Date(application.startDate).toLocaleDateString() : 'N/A'}
+                                                </td>
+                                                <td className="px-2 py-4 text-sm">
+                                                    {(application.leaveType === 'HALF_DAY_CL' || application.leaveType === 'HALF_DAY_EL' || application.leaveType === 'HALF_DAY_LWP')
+                                                        ? 'Half-Day'
+                                                        : application.endDate
+                                                        ? new Date(application.endDate).toLocaleDateString()
+                                                        : 'N/A'}
+                                                </td>
+                                                <td className="px-4">
+                                                    <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(application.status)}`}>
                                                         {getStatusIcon(application.status)}
-                                                        <span className="ml-1">{application.status}</span>
+                                                        <span>{application.status || 'Unknown'}</span>
                                                     </span>
                                                 </td>
-                                                <td className="py-3 px-4">{new Date(application.appliedOn).toLocaleDateString()}</td>
-                                                <td className="py-3 px-4">{leaveBalance[leaveTypeMap[application.leaveType]]?.remaining.toFixed(1)}</td>
+                                                <td className="px-10 py-4 text-sm">
+                                                    {application.appliedOn ? new Date(application.appliedOn).toLocaleDateString() : 'N/A'}
+                                                </td>
+                                                <td className="px-6 py-4 text-sm text-center">
+                                                    {(application.remainingLeaves != null ? application.remainingLeaves : 0).toFixed(1)}
+                                                </td>
                                             </tr>
                                         ))
                                     ) : (
                                         <tr>
-                                            <td colSpan="6" className="text-center py-4 text-gray-500">
+                                            <td colSpan="6" className="px-6 py-4 text-center text-gray-500">
                                                 No leave applications found
                                             </td>
                                         </tr>
@@ -656,9 +821,9 @@ export default function EmployeeDashboard() {
                 </div>
             </main>
 
-            <footer className="bg-blue-700 text-white py-4 text-center shadow-inner">
+            <footer className="bg-blue-600 text-white py-3 text-center shadow-md">
                 <div className="max-w-7xl mx-auto px-4">
-                    <p className="text-sm text-white">© 2025 BISAG-N. All rights reserved.</p>
+                    <p className="text-sm">© 2025 BISAG-NK. All rights reserved.</p>
                 </div>
             </footer>
         </div>

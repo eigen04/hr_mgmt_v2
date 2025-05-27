@@ -13,7 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
+import java.time.DayOfWeek;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,6 +33,8 @@ public class LeaveService {
     @Autowired
     private UserService userService;
 
+    private static final double LWP_ANNUAL_LIMIT = 300.0; // Annual limit for LWP
+
     @Transactional
     public LeaveApplication applyLeave(LeaveApplication application) {
         logger.info("Applying leave for user: {}, type: {}", userService.getCurrentUser().getId(), application.getLeaveType());
@@ -41,6 +43,29 @@ public class LeaveService {
         application.setStatus("PENDING");
         application.setAppliedOn(LocalDate.now());
 
+        // Validation: Prevent past start dates
+        LocalDate today = LocalDate.now();
+        if (application.getStartDate().isBefore(today)) {
+            logger.warn("Attempted to apply leave with past start date: {} for user: {}", application.getStartDate(), user.getId());
+            throw new RuntimeException("Start date cannot be in the past");
+        }
+
+        // Set fixed end date for maternity and paternity leaves
+        if (application.getLeaveType().equals("ML")) {
+            if (!"FEMALE".equalsIgnoreCase(user.getGender())) {
+                logger.warn("User {} (gender: {}) attempted to apply for maternity leave", user.getId(), user.getGender());
+                throw new RuntimeException("Maternity leave is only available for female employees");
+            }
+            application.setEndDate(application.getStartDate().plusDays(181)); // 182 days total
+        } else if (application.getLeaveType().equals("PL")) {
+            if (!"MALE".equalsIgnoreCase(user.getGender())) {
+                logger.warn("User {} (gender: {}) attempted to apply for paternity leave", user.getId(), user.getGender());
+                throw new RuntimeException("Paternity leave is only available for male employees");
+            }
+            application.setEndDate(application.getStartDate().plusDays(14)); // 15 days total
+        }
+
+        // Set approver
         if (user.getRole().equals("HOD")) {
             User director = userService.findDirector();
             if (director == null) {
@@ -57,34 +82,59 @@ public class LeaveService {
             application.setApproverId(hod.getId());
         }
 
+        // Initialize leave balance if null
         LeaveBalance leaveBalance = user.getLeaveBalance();
         if (leaveBalance == null) {
             leaveBalance = new LeaveBalance();
+            leaveBalance.setCasualLeaveRemaining(12.0);
+            leaveBalance.setCasualLeaveUsed(0.0);
+            leaveBalance.setEarnedLeaveRemaining(20.0);
+            leaveBalance.setEarnedLeaveUsed(0.0);
+            if ("FEMALE".equalsIgnoreCase(user.getGender())) {
+                leaveBalance.setMaternityLeaveRemaining(182.0);
+                leaveBalance.setMaternityLeaveUsed(0.0);
+            } else {
+                leaveBalance.setPaternityLeaveRemaining(15.0);
+                leaveBalance.setPaternityLeaveUsed(0.0);
+            }
             user.setLeaveBalance(leaveBalance);
             userRepository.save(user);
         }
 
-        // New validation: Check for overlapping leaves
-        LocalDate effectiveEndDate = application.getEndDate();
-        if (application.getLeaveType().equals("HALF_DAY_CL") || application.getLeaveType().equals("HALF_DAY_EL")) {
-            effectiveEndDate = application.getStartDate(); // For half-day leaves, end date is same as start date
+        // For Half-Day leaves, set end date same as start date and mark as half-day
+        if (application.getLeaveType().equals("HALF_DAY_CL") || application.getLeaveType().equals("HALF_DAY_EL") || application.getLeaveType().equals("HALF_DAY_LWP")) {
+            application.setEndDate(application.getStartDate());
+            application.setHalfDay(true);
         }
+
+        // Check for overlapping leaves
+        LocalDate effectiveEndDate = application.getEndDate();
         List<LeaveApplication> overlappingLeaves = leaveApplicationRepository.findOverlappingLeaves(
                 user, application.getStartDate(), effectiveEndDate);
         if (!overlappingLeaves.isEmpty()) {
-            logger.warn("User {} has overlapping leave applications for dates: {} to {}", 
-                    user.getId(), application.getStartDate(), effectiveEndDate);
-            throw new RuntimeException(
+            StringBuilder errorMessage = new StringBuilder(
                     "You already have a pending or approved leave application overlapping with the dates " +
-                            application.getStartDate() + " to " + effectiveEndDate + ". Please wait until it is processed or rejected.");
+                            application.getStartDate() + " to " + effectiveEndDate + ". Overlapping applications:\n");
+            for (LeaveApplication overlapping : overlappingLeaves) {
+                errorMessage.append(String.format("- %s from %s to %s (Status: %s)\n",
+                        overlapping.getLeaveType(), overlapping.getStartDate(), overlapping.getEndDate(), overlapping.getStatus()));
+            }
+            errorMessage.append("Please wait until they are processed or rejected.");
+            logger.warn("User {} has overlapping leave applications for dates: {} to {}. Details: {}", 
+                    user.getId(), application.getStartDate(), effectiveEndDate, errorMessage);
+            throw new RuntimeException(errorMessage.toString());
         }
 
-        // Existing validation: Check for existing half-day leave on the same date
-        if (application.getLeaveType().equals("HALF_DAY_CL") || application.getLeaveType().equals("HALF_DAY_EL")) {
+        // Validate half-day leave on the same date and ensure it's on a working day
+        if (application.getLeaveType().equals("HALF_DAY_CL") || application.getLeaveType().equals("HALF_DAY_EL") || application.getLeaveType().equals("HALF_DAY_LWP")) {
             LocalDate startDate = application.getStartDate();
+            if (isNonWorkingDay(startDate)) {
+                logger.warn("User {} attempted to apply half-day leave on a non-working day: {}", user.getId(), startDate);
+                throw new RuntimeException("Half-day leave cannot be applied on a non-working day (second/fourth Saturday or Sunday)");
+            }
             List<LeaveApplication> existingLeaves = leaveApplicationRepository.findByUserAndStartDate(user, startDate);
             boolean hasHalfDayLeave = existingLeaves.stream()
-                    .anyMatch(leave -> (leave.getLeaveType().equals("HALF_DAY_CL") || leave.getLeaveType().equals("HALF_DAY_EL"))
+                    .anyMatch(leave -> (leave.getLeaveType().equals("HALF_DAY_CL") || leave.getLeaveType().equals("HALF_DAY_EL") || leave.getLeaveType().equals("HALF_DAY_LWP"))
                             && (leave.getStatus().equals("PENDING") || leave.getStatus().equals("APPROVED")));
             if (hasHalfDayLeave) {
                 logger.warn("User {} already has a half-day leave on date: {}", user.getId(), startDate);
@@ -92,34 +142,39 @@ public class LeaveService {
             }
         }
 
+        // Calculate leave balance
         Map<String, Double> balance = calculateLeaveBalance(user);
         String effectiveLeaveType = application.getLeaveType();
         if (application.getLeaveType().equals("HALF_DAY_CL")) {
             effectiveLeaveType = "CL";
         } else if (application.getLeaveType().equals("HALF_DAY_EL")) {
             effectiveLeaveType = "EL";
+        } else if (application.getLeaveType().equals("HALF_DAY_LWP")) {
+            effectiveLeaveType = "LWP";
         }
-        double remainingLeaves = balance.getOrDefault(effectiveLeaveType, 0.0);
 
         double requiredDays = calculateRequiredDays(application.getLeaveType(), application.getStartDate(), application.getEndDate(), application.isHalfDay());
+        logger.info("Calculated required days for leave application: {}, type: {}: {}", application.getId(), application.getLeaveType(), requiredDays);
 
-        // Check remaining balance for all leave types
+        // Check balance for all leave types, including LWP
+        double remainingLeaves = balance.getOrDefault(effectiveLeaveType, 0.0);
         if (remainingLeaves < requiredDays) {
             logger.warn("Insufficient leave balance for user: {}, type: {}, remaining: {}, required: {}", user.getId(), application.getLeaveType(), remainingLeaves, requiredDays);
             throw new RuntimeException("Insufficient " + effectiveLeaveType + " balance. Remaining: " + remainingLeaves);
         }
 
-        if (application.getLeaveType().equals("PL")) {
-            double totalPaternityLeaveUsed = leaveBalance.getPaternityLeaveUsed() + requiredDays;
-            if (totalPaternityLeaveUsed > 15.0) {
-                logger.warn("Total paternity leave exceeds 15 days for user: {}", user.getId());
-                throw new RuntimeException("Total paternity leave cannot exceed 15 days. You have already used " + leaveBalance.getPaternityLeaveUsed() + " days.");
-            }
-        } else if (application.getLeaveType().equals("ML")) {
+        // Validate ML/PL total usage
+        if (application.getLeaveType().equals("ML")) {
             double totalMaternityLeaveUsed = leaveBalance.getMaternityLeaveUsed() + requiredDays;
             if (totalMaternityLeaveUsed > 182.0) {
                 logger.warn("Total maternity leave exceeds 182 days for user: {}", user.getId());
                 throw new RuntimeException("Total maternity leave cannot exceed 182 days. You have already used " + leaveBalance.getMaternityLeaveUsed() + " days.");
+            }
+        } else if (application.getLeaveType().equals("PL")) {
+            double totalPaternityLeaveUsed = leaveBalance.getPaternityLeaveUsed() + requiredDays;
+            if (totalPaternityLeaveUsed > 15.0) {
+                logger.warn("Total paternity leave exceeds 15 days for user: {}", user.getId());
+                throw new RuntimeException("Total paternity leave cannot exceed 15 days. You have already used " + leaveBalance.getPaternityLeaveUsed() + " days.");
             }
         }
 
@@ -149,39 +204,134 @@ public class LeaveService {
 
     public Map<String, Object> getLeaveBalance() {
         User user = userService.getCurrentUser();
-        Map<String, Double> balance = calculateLeaveBalance(user);
+        LeaveBalance leaveBalance = user.getLeaveBalance();
         Map<String, Object> result = new HashMap<>();
 
+        // Initialize leave balance if null
+        if (leaveBalance == null) {
+            leaveBalance = new LeaveBalance();
+            leaveBalance.setCasualLeaveRemaining(12.0);
+            leaveBalance.setCasualLeaveUsed(0.0);
+            leaveBalance.setEarnedLeaveRemaining(20.0);
+            leaveBalance.setEarnedLeaveUsed(0.0);
+            if ("FEMALE".equalsIgnoreCase(user.getGender())) {
+                leaveBalance.setMaternityLeaveRemaining(182.0);
+                leaveBalance.setMaternityLeaveUsed(0.0);
+            } else {
+                leaveBalance.setPaternityLeaveRemaining(15.0);
+                leaveBalance.setPaternityLeaveUsed(0.0);
+            }
+            user.setLeaveBalance(leaveBalance);
+            userRepository.save(user);
+        }
+
+        // Recalculate used days for each leave type
+        double clUsed = calculateTotalUsedDays(user, List.of("CL", "HALF_DAY_CL"));
+        double elUsed = calculateTotalUsedDays(user, List.of("EL", "HALF_DAY_EL"));
+        double mlUsed = calculateTotalUsedDays(user, List.of("ML"));
+        double plUsed = calculateTotalUsedDays(user, List.of("PL"));
+
+        // Update leave balance with recalculated values
+        leaveBalance.setCasualLeaveUsed(clUsed);
+        leaveBalance.setCasualLeaveRemaining(12.0 - clUsed);
+        leaveBalance.setEarnedLeaveUsed(elUsed);
+        leaveBalance.setEarnedLeaveRemaining(20.0 - elUsed);
+        if ("FEMALE".equalsIgnoreCase(user.getGender())) {
+            leaveBalance.setMaternityLeaveUsed(mlUsed);
+            leaveBalance.setMaternityLeaveRemaining(182.0 - mlUsed);
+        } else {
+            leaveBalance.setPaternityLeaveUsed(plUsed);
+            leaveBalance.setPaternityLeaveRemaining(15.0 - plUsed);
+        }
+        userRepository.save(user);
+
+        // Calculate LWP usage for the current year (2025)
+        LocalDate startOfYear = LocalDate.of(2025, 1, 1);
+        LocalDate endOfYear = LocalDate.of(2025, 12, 31);
+        List<LeaveApplication> lwpApplications = leaveApplicationRepository.findByUserAndLeaveTypeInAndStartDateBetween(
+                user, List.of("LWP", "HALF_DAY_LWP"), startOfYear, endOfYear);
+
+        double totalLwpUsed = lwpApplications.stream()
+                .filter(app -> app.getStatus().equals("APPROVED")) // Only count approved leaves
+                .mapToDouble(app -> calculateRequiredDays(app.getLeaveType(), app.getStartDate(), app.getEndDate(), app.isHalfDay()))
+                .sum();
+        double remainingLwp = LWP_ANNUAL_LIMIT - totalLwpUsed;
+
+        // Populate result map
         result.put("casualLeave", Map.of(
                 "total", 12.0,
-                "used", 12.0 - balance.getOrDefault("CL", 12.0),
-                "remaining", balance.getOrDefault("CL", 12.0)
+                "used", Math.round(clUsed * 10.0) / 10.0,
+                "remaining", Math.round((12.0 - clUsed) * 10.0) / 10.0
         ));
         result.put("earnedLeave", Map.of(
                 "total", 20.0,
-                "used", 20.0 - balance.getOrDefault("EL", 20.0),
-                "remaining", balance.getOrDefault("EL", 20.0)
+                "used", Math.round(elUsed * 10.0) / 10.0,
+                "remaining", Math.round((20.0 - elUsed) * 10.0) / 10.0
         ));
         if ("FEMALE".equalsIgnoreCase(user.getGender())) {
             result.put("maternityLeave", Map.of(
                     "total", 182.0,
-                    "used", 182.0 - balance.getOrDefault("ML", 182.0),
-                    "remaining", balance.getOrDefault("ML", 182.0)
+                    "used", Math.round(mlUsed * 10.0) / 10.0,
+                    "remaining", Math.round((182.0 - mlUsed) * 10.0) / 10.0
             ));
         } else {
             result.put("paternityLeave", Map.of(
                     "total", 15.0,
-                    "used", 15.0 - balance.getOrDefault("PL", 15.0),
-                    "remaining", balance.getOrDefault("PL", 15.0)
+                    "used", Math.round(plUsed * 10.0) / 10.0,
+                    "remaining", Math.round((15.0 - plUsed) * 10.0) / 10.0
             ));
         }
+        result.put("leaveWithoutPay", Map.of(
+                "total", LWP_ANNUAL_LIMIT,
+                "used", Math.round(totalLwpUsed * 10.0) / 10.0,
+                "remaining", Math.round(Math.max(0, remainingLwp) * 10.0) / 10.0
+        ));
 
+        // Log the balances based on gender
+        if ("FEMALE".equalsIgnoreCase(user.getGender())) {
+            logger.info("Fetched leave balance for user {}: CL used {}, remaining {}; EL used {}, remaining {}; ML used {}, remaining {}; LWP used {}, remaining {}", 
+                        user.getId(), 
+                        clUsed, leaveBalance.getCasualLeaveRemaining(),
+                        elUsed, leaveBalance.getEarnedLeaveRemaining(),
+                        mlUsed, leaveBalance.getMaternityLeaveRemaining(),
+                        totalLwpUsed, remainingLwp);
+        } else {
+            logger.info("Fetched leave balance for user {}: CL used {}, remaining {}; EL used {}, remaining {}; PL used {}, remaining {}; LWP used {}, remaining {}", 
+                        user.getId(), 
+                        clUsed, leaveBalance.getCasualLeaveRemaining(),
+                        elUsed, leaveBalance.getEarnedLeaveRemaining(),
+                        plUsed, leaveBalance.getPaternityLeaveRemaining(),
+                        totalLwpUsed, remainingLwp);
+        }
         return result;
+    }
+
+    private double calculateTotalUsedDays(User user, List<String> leaveTypes) {
+        List<LeaveApplication> approvedLeaves = leaveApplicationRepository.findByUserAndStatus(user, "APPROVED")
+                .stream()
+                .filter(leave -> leaveTypes.contains(leave.getLeaveType()))
+                .collect(Collectors.toList());
+
+        double totalDays = 0.0;
+        for (LeaveApplication leave : approvedLeaves) {
+            double days = calculateRequiredDays(leave.getLeaveType(), leave.getStartDate(), leave.getEndDate(), leave.isHalfDay());
+            totalDays += days;
+            logger.debug("Leave ID {} (Type: {}): {} days (Start: {}, End: {}, Half Day: {})", 
+                        leave.getId(), leave.getLeaveType(), days, leave.getStartDate(), leave.getEndDate(), leave.isHalfDay());
+        }
+        logger.info("Total used days for user {} and leave types {}: {}", user.getId(), leaveTypes, totalDays);
+        return totalDays;
     }
 
     private Map<String, Double> calculateLeaveBalance(User user) {
         LeaveBalance leaveBalance = user.getLeaveBalance();
         Map<String, Double> balance = new HashMap<>();
+
+        // Recalculate used days for each leave type
+        double clUsed = calculateTotalUsedDays(user, List.of("CL", "HALF_DAY_CL"));
+        double elUsed = calculateTotalUsedDays(user, List.of("EL", "HALF_DAY_EL"));
+        double mlUsed = calculateTotalUsedDays(user, List.of("ML"));
+        double plUsed = calculateTotalUsedDays(user, List.of("PL"));
 
         if (leaveBalance == null) {
             balance.put("CL", 12.0);
@@ -192,6 +342,20 @@ public class LeaveService {
                 balance.put("PL", 15.0);
             }
         } else {
+            leaveBalance.setCasualLeaveUsed(clUsed);
+            leaveBalance.setCasualLeaveRemaining(12.0 - clUsed);
+            leaveBalance.setEarnedLeaveUsed(elUsed);
+            leaveBalance.setEarnedLeaveRemaining(20.0 - elUsed);
+            if ("FEMALE".equalsIgnoreCase(user.getGender())) {
+                leaveBalance.setMaternityLeaveUsed(mlUsed);
+                leaveBalance.setMaternityLeaveRemaining(182.0 - mlUsed);
+            } else {
+                leaveBalance.setPaternityLeaveUsed(plUsed);
+                leaveBalance.setPaternityLeaveRemaining(15.0 - plUsed);
+            }
+            user.setLeaveBalance(leaveBalance);
+            userRepository.save(user);
+
             balance.put("CL", leaveBalance.getCasualLeaveRemaining());
             balance.put("EL", leaveBalance.getEarnedLeaveRemaining());
             if ("FEMALE".equalsIgnoreCase(user.getGender())) {
@@ -201,14 +365,76 @@ public class LeaveService {
             }
         }
 
+        // Calculate LWP balance for the current year (2025)
+        LocalDate startOfYear = LocalDate.of(2025, 1, 1);
+        LocalDate endOfYear = LocalDate.of(2025, 12, 31);
+        List<LeaveApplication> lwpApplications = leaveApplicationRepository.findByUserAndLeaveTypeInAndStartDateBetween(
+                user, List.of("LWP", "HALF_DAY_LWP"), startOfYear, endOfYear);
+
+        double totalLwpUsed = lwpApplications.stream()
+                .filter(app -> app.getStatus().equals("APPROVED")) // Only count approved leaves
+                .mapToDouble(app -> calculateRequiredDays(app.getLeaveType(), app.getStartDate(), app.getEndDate(), app.isHalfDay()))
+                .sum();
+
+        balance.put("LWP", Math.max(0, LWP_ANNUAL_LIMIT - totalLwpUsed));
         return balance;
     }
 
     private double calculateRequiredDays(String leaveType, LocalDate startDate, LocalDate endDate, boolean isHalfDay) {
-        if (leaveType.equals("HALF_DAY_CL") || leaveType.equals("HALF_DAY_EL")) {
+        // Handle half-day leaves
+        if (isHalfDay) {
+            logger.debug("Half-day leave ({}): Counting 0.5 days on {}", leaveType, startDate);
             return 0.5;
         }
-        return ChronoUnit.DAYS.between(startDate, endDate) + 1;
+
+        // For maternity and paternity leaves, return fixed durations
+        if (leaveType.equals("ML")) {
+            logger.debug("Maternity leave: Fixed 182 days from {}", startDate);
+            return 182.0;
+        }
+        if (leaveType.equals("PL")) {
+            logger.debug("Paternity leave: Fixed 15 days from {}", startDate);
+            return 15.0;
+        }
+
+        // For other full-day leaves, calculate days based on leave type
+        LocalDate currentDate = startDate;
+        double totalDays = 0.0;
+
+        // Determine if holidays should be counted based on leave type
+        boolean countHolidays = leaveType.equals("EL") || leaveType.equals("LWP") || leaveType.equals("HALF_DAY_LWP");
+
+        while (!currentDate.isAfter(endDate)) {
+            if (countHolidays) {
+                // For EL and LWP: Count all days, including holidays
+                totalDays += 1.0;
+                logger.debug("Counting day for {}: {} (Day of week: {})", leaveType, currentDate, currentDate.getDayOfWeek());
+            } else {
+                // For CL: Count only working days, exclude holidays
+                if (!isNonWorkingDay(currentDate)) {
+                    totalDays += 1.0;
+                    logger.debug("Counting working day for {}: {} (Day of week: {})", leaveType, currentDate, currentDate.getDayOfWeek());
+                } else {
+                    logger.debug("Skipping non-working day for {}: {} (Day of week: {})", leaveType, currentDate, currentDate.getDayOfWeek());
+                }
+            }
+            currentDate = currentDate.plusDays(1);
+        }
+
+        logger.debug("Calculated {} days for leave type {} from {} to {}", totalDays, leaveType, startDate, endDate);
+        return totalDays;
+    }
+
+    private boolean isNonWorkingDay(LocalDate date) {
+        DayOfWeek dayOfWeek = date.getDayOfWeek();
+        if (dayOfWeek == DayOfWeek.SUNDAY) {
+            return true;
+        }
+        if (dayOfWeek == DayOfWeek.SATURDAY) {
+            int weekOfMonth = (date.getDayOfMonth() - 1) / 7 + 1;
+            return weekOfMonth == 2 || weekOfMonth == 4;
+        }
+        return false;
     }
 
     @Transactional
@@ -232,53 +458,101 @@ public class LeaveService {
             throw new RuntimeException("Leave application is already processed");
         }
 
+        leave.setStatus("APPROVED");
+        leaveApplicationRepository.save(leave);
+
+        // Recalculate balance after approval
         User user = leave.getUser();
         LeaveBalance leaveBalance = user.getLeaveBalance();
         if (leaveBalance == null) {
             leaveBalance = new LeaveBalance();
+            leaveBalance.setCasualLeaveRemaining(12.0);
+            leaveBalance.setCasualLeaveUsed(0.0);
+            leaveBalance.setEarnedLeaveRemaining(20.0);
+            leaveBalance.setEarnedLeaveUsed(0.0);
+            if ("FEMALE".equalsIgnoreCase(user.getGender())) {
+                leaveBalance.setMaternityLeaveRemaining(182.0);
+                leaveBalance.setMaternityLeaveUsed(0.0);
+            } else {
+                leaveBalance.setPaternityLeaveRemaining(15.0);
+                leaveBalance.setPaternityLeaveUsed(0.0);
+            }
             user.setLeaveBalance(leaveBalance);
         }
 
-        double days = calculateRequiredDays(leave.getLeaveType(), leave.getStartDate(), leave.getEndDate(), leave.isHalfDay());
+        // Recalculate total used days for all leave types
+        double clUsed = calculateTotalUsedDays(user, List.of("CL", "HALF_DAY_CL"));
+        double elUsed = calculateTotalUsedDays(user, List.of("EL", "HALF_DAY_EL"));
+        double mlUsed = calculateTotalUsedDays(user, List.of("ML"));
+        double plUsed = calculateTotalUsedDays(user, List.of("PL"));
 
-        switch (leave.getLeaveType()) {
-            case "CL":
-            case "HALF_DAY_CL":
-                leaveBalance.setCasualLeaveUsed(leaveBalance.getCasualLeaveUsed() + days);
-                leaveBalance.setCasualLeaveRemaining(leaveBalance.getCasualLeaveRemaining() - days);
-                break;
-            case "EL":
-            case "HALF_DAY_EL":
-                leaveBalance.setEarnedLeaveUsed(leaveBalance.getEarnedLeaveUsed() + days);
-                leaveBalance.setEarnedLeaveRemaining(leaveBalance.getEarnedLeaveRemaining() - days);
-                break;
-            case "ML":
-                leaveBalance.setMaternityLeaveUsed(leaveBalance.getMaternityLeaveUsed() + days);
-                leaveBalance.setMaternityLeaveRemaining(leaveBalance.getMaternityLeaveRemaining() - days);
-                break;
-            case "PL":
-                leaveBalance.setPaternityLeaveUsed(leaveBalance.getPaternityLeaveUsed() + days);
-                leaveBalance.setPaternityLeaveRemaining(leaveBalance.getPaternityLeaveRemaining() - days);
-                break;
-            default:
-                logger.error("Invalid leave type: {}", leave.getLeaveType());
-                throw new RuntimeException("Invalid leave type: " + leave.getLeaveType());
+        // Update leave balance
+        leaveBalance.setCasualLeaveUsed(clUsed);
+        leaveBalance.setCasualLeaveRemaining(12.0 - clUsed);
+        leaveBalance.setEarnedLeaveUsed(elUsed);
+        leaveBalance.setEarnedLeaveRemaining(20.0 - elUsed);
+        if ("FEMALE".equalsIgnoreCase(user.getGender())) {
+            leaveBalance.setMaternityLeaveUsed(mlUsed);
+            leaveBalance.setMaternityLeaveRemaining(182.0 - mlUsed);
+        } else {
+            leaveBalance.setPaternityLeaveUsed(plUsed);
+            leaveBalance.setPaternityLeaveRemaining(15.0 - plUsed);
         }
 
-        user.setLeaveBalance(leaveBalance);
-        userRepository.save(user);
+        // Update user entity for LWP fields
+        LocalDate startOfYear = LocalDate.of(2025, 1, 1);
+        LocalDate endOfYear = LocalDate.of(2025, 12, 31);
+        List<LeaveApplication> lwpApplications = leaveApplicationRepository.findByUserAndLeaveTypeInAndStartDateBetween(
+                user, List.of("LWP", "HALF_DAY_LWP"), startOfYear, endOfYear);
+        double totalLwpUsed = lwpApplications.stream()
+                .filter(app -> app.getStatus().equals("APPROVED"))
+                .mapToDouble(app -> calculateRequiredDays(app.getLeaveType(), app.getStartDate(), app.getEndDate(), app.isHalfDay()))
+                .sum();
 
-        leave.setStatus("APPROVED");
+        // Update user entity with LWP usage
+        user.setLeaveWithoutPayment(lwpApplications.stream()
+                .filter(app -> app.getLeaveType().equals("LWP") && app.getStatus().equals("APPROVED"))
+                .mapToDouble(app -> calculateRequiredDays(app.getLeaveType(), app.getStartDate(), app.getEndDate(), app.isHalfDay()))
+                .sum());
+        user.setHalfDayLwp(lwpApplications.stream()
+                .filter(app -> app.getLeaveType().equals("HALF_DAY_LWP") && app.getStatus().equals("APPROVED"))
+                .mapToDouble(app -> calculateRequiredDays(app.getLeaveType(), app.getStartDate(), app.getEndDate(), app.isHalfDay()))
+                .sum());
+
+        // Set remaining leaves for this leave application
         Map<String, Double> updatedBalance = calculateLeaveBalance(user);
         String effectiveLeaveType = leave.getLeaveType();
         if (leave.getLeaveType().equals("HALF_DAY_CL")) {
             effectiveLeaveType = "CL";
         } else if (leave.getLeaveType().equals("HALF_DAY_EL")) {
             effectiveLeaveType = "EL";
+        } else if (leave.getLeaveType().equals("HALF_DAY_LWP")) {
+            effectiveLeaveType = "LWP";
         }
         leave.setRemainingLeaves(updatedBalance.getOrDefault(effectiveLeaveType, 0.0));
         leaveApplicationRepository.save(leave);
-        logger.info("Leave approved for user: {}. Updated balance: {}", user.getId(), leaveBalance);
+
+        userRepository.save(user);
+
+        // Log the balances based on gender
+        double leaveDays = calculateRequiredDays(leave.getLeaveType(), leave.getStartDate(), leave.getEndDate(), leave.isHalfDay());
+        if ("FEMALE".equalsIgnoreCase(user.getGender())) {
+            logger.info("Leave approved for user: {}. Leave ID: {}, Type: {}, Days: {}", 
+                        user.getId(), leaveId, leave.getLeaveType(), leaveDays);
+            logger.info("Updated balances - CL: used {}, remaining {}; EL: used {}, remaining {}; ML: used {}, remaining {}; LWP: used {}, remaining {}", 
+                        clUsed, leaveBalance.getCasualLeaveRemaining(), 
+                        elUsed, leaveBalance.getEarnedLeaveRemaining(),
+                        mlUsed, leaveBalance.getMaternityLeaveRemaining(),
+                        totalLwpUsed, updatedBalance.get("LWP"));
+        } else {
+            logger.info("Leave approved for user: {}. Leave ID: {}, Type: {}, Days: {}", 
+                        user.getId(), leaveId, leave.getLeaveType(), leaveDays);
+            logger.info("Updated balances - CL: used {}, remaining {}; EL: used {}, remaining {}; PL: used {}, remaining {}; LWP: used {}, remaining {}", 
+                        clUsed, leaveBalance.getCasualLeaveRemaining(), 
+                        elUsed, leaveBalance.getEarnedLeaveRemaining(),
+                        plUsed, leaveBalance.getPaternityLeaveRemaining(),
+                        totalLwpUsed, updatedBalance.get("LWP"));
+        }
     }
 
     @Transactional

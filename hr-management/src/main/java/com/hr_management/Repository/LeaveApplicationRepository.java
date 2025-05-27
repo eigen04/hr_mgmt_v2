@@ -5,10 +5,12 @@ import com.hr_management.Entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
 import java.util.List;
 
+@Repository
 public interface LeaveApplicationRepository extends JpaRepository<LeaveApplication, Long> {
 
     List<LeaveApplication> findByUser(User user);
@@ -29,6 +31,7 @@ public interface LeaveApplicationRepository extends JpaRepository<LeaveApplicati
     List<LeaveApplication> findApprovedLeavesOnDate(@Param("date") LocalDate date);
 
     List<LeaveApplication> findByUserIdAndStatus(Long userId, String status);
+
     List<LeaveApplication> findByUserAndStatus(User user, String status);
 
     @Query("SELECT la FROM LeaveApplication la WHERE la.approverId = :approverId AND la.status = :status")
@@ -36,13 +39,22 @@ public interface LeaveApplicationRepository extends JpaRepository<LeaveApplicati
 
     List<LeaveApplication> findByUserAndStartDate(@Param("user") User user, @Param("startDate") LocalDate startDate);
 
-    // New method to find overlapping leave applications for a user
     @Query("SELECT la FROM LeaveApplication la WHERE la.user = :user " +
+           "AND la.status IN ('PENDING', 'APPROVED') " +
            "AND la.startDate <= :endDate " +
-           "AND la.endDate >= :startDate " +
-           "AND la.status IN ('PENDING', 'APPROVED')")
+           "AND la.endDate >= :startDate")
     List<LeaveApplication> findOverlappingLeaves(
             @Param("user") User user,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate);
+
+    @Query("SELECT la FROM LeaveApplication la WHERE la.user = :user " +
+           "AND la.leaveType IN :leaveTypes " +
+           "AND la.startDate BETWEEN :startDate AND :endDate " +
+           "AND la.status = 'APPROVED'")
+    List<LeaveApplication> findByUserAndLeaveTypeInAndStartDateBetween(
+            @Param("user") User user,
+            @Param("leaveTypes") List<String> leaveTypes,
             @Param("startDate") LocalDate startDate,
             @Param("endDate") LocalDate endDate);
 }
