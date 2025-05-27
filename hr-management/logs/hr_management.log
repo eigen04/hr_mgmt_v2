@@ -1,0 +1,217 @@
+2025-05-27T10:34:06.497+05:30  INFO 29284 --- [main] c.hr_management.HrManagementApplication  : Starting HrManagementApplication using Java 21.0.6 with PID 29284 (D:\hr_management_system\hr-management\target\classes started by Shanu in D:\hr_management_system\hr-management)
+2025-05-27T10:34:06.513+05:30  INFO 29284 --- [main] c.hr_management.HrManagementApplication  : No active profile set, falling back to 1 default profile: "default"
+2025-05-27T10:34:07.661+05:30  INFO 29284 --- [main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2025-05-27T10:34:07.727+05:30  INFO 29284 --- [main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 52 ms. Found 5 JPA repository interfaces.
+2025-05-27T10:34:08.837+05:30  INFO 29284 --- [main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port 8081 (http)
+2025-05-27T10:34:08.855+05:30  INFO 29284 --- [main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2025-05-27T10:34:08.856+05:30  INFO 29284 --- [main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/10.1.40]
+2025-05-27T10:34:08.940+05:30  INFO 29284 --- [main] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring embedded WebApplicationContext
+2025-05-27T10:34:08.941+05:30  INFO 29284 --- [main] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 2363 ms
+2025-05-27T10:34:09.176+05:30  INFO 29284 --- [main] o.hibernate.jpa.internal.util.LogHelper  : HHH000204: Processing PersistenceUnitInfo [name: default]
+2025-05-27T10:34:09.287+05:30  INFO 29284 --- [main] org.hibernate.Version                    : HHH000412: Hibernate ORM core version 6.6.13.Final
+2025-05-27T10:34:09.349+05:30  INFO 29284 --- [main] o.h.c.internal.RegionFactoryInitiator    : HHH000026: Second-level cache disabled
+2025-05-27T10:34:09.910+05:30  INFO 29284 --- [main] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2025-05-27T10:34:09.964+05:30  INFO 29284 --- [main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2025-05-27T10:34:10.438+05:30  INFO 29284 --- [main] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection com.mysql.cj.jdbc.ConnectionImpl@3cbfdf5c
+2025-05-27T10:34:10.440+05:30  INFO 29284 --- [main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+2025-05-27T10:34:10.517+05:30  WARN 29284 --- [main] org.hibernate.orm.deprecation            : HHH90000025: MySQL8Dialect does not need to be specified explicitly using 'hibernate.dialect' (remove the property setting and it will be selected by default)
+2025-05-27T10:34:10.518+05:30  WARN 29284 --- [main] org.hibernate.orm.deprecation            : HHH90000026: MySQL8Dialect has been deprecated; use org.hibernate.dialect.MySQLDialect instead
+2025-05-27T10:34:10.540+05:30  INFO 29284 --- [main] org.hibernate.orm.connections.pooling    : HHH10001005: Database info:
+	Database JDBC URL [Connecting through datasource 'HikariDataSource (HikariPool-1)']
+	Database driver: undefined/unknown
+	Database version: 8.0
+	Autocommit mode: undefined/unknown
+	Isolation level: undefined/unknown
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2025-05-27T10:34:11.497+05:30  INFO 29284 --- [main] o.h.e.t.j.p.i.JtaPlatformInitiator       : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2025-05-27T10:34:11.613+05:30  INFO 29284 --- [main] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2025-05-27T10:34:11.994+05:30  INFO 29284 --- [main] o.s.d.j.r.query.QueryEnhancerFactory     : Hibernate is in classpath; If applicable, HQL parser will be used.
+2025-05-27T10:34:12.998+05:30  WARN 29284 --- [main] JpaBaseConfiguration$JpaWebConfiguration : spring.jpa.open-in-view is enabled by default. Therefore, database queries may be performed during view rendering. Explicitly configure spring.jpa.open-in-view to disable this warning
+2025-05-27T10:34:13.030+05:30  WARN 29284 --- [main] r$InitializeUserDetailsManagerConfigurer : Found 2 UserDetailsService beans, with names [userService, userDetailsService]. Global Authentication Manager will not use a UserDetailsService for username/password login. Consider publishing a single UserDetailsService bean.
+2025-05-27T10:34:14.199+05:30  INFO 29284 --- [main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port 8081 (http) with context path '/'
+2025-05-27T10:34:14.209+05:30  INFO 29284 --- [main] c.hr_management.HrManagementApplication  : Started HrManagementApplication in 8.329 seconds (process running for 8.736)
+2025-05-27T10:35:31.321+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-1] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring DispatcherServlet 'dispatcherServlet'
+2025-05-27T10:35:31.321+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-1] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServlet'
+2025-05-27T10:35:31.323+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-1] o.s.web.servlet.DispatcherServlet        : Completed initialization in 1 ms
+2025-05-27T10:36:35.976+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-4] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [CL, HALF_DAY_CL]: 0.0
+2025-05-27T10:36:35.983+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-4] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [EL, HALF_DAY_EL]: 0.0
+2025-05-27T10:36:35.991+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-4] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [ML]: 0.0
+2025-05-27T10:36:35.997+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-4] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [PL]: 0.0
+2025-05-27T10:36:36.051+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-4] com.hr_management.service.LeaveService   : Fetched leave balance for user 37: CL used 0.0, remaining 12.0; EL used 0.0, remaining 20.0; PL used 0.0, remaining 15.0; LWP used 0.0, remaining 300.0
+2025-05-27T10:36:36.102+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-1] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [CL, HALF_DAY_CL]: 0.0
+2025-05-27T10:36:36.109+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-1] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [EL, HALF_DAY_EL]: 0.0
+2025-05-27T10:36:36.116+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-1] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [ML]: 0.0
+2025-05-27T10:36:36.122+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-1] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [PL]: 0.0
+2025-05-27T10:36:36.131+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-1] com.hr_management.service.LeaveService   : Fetched leave balance for user 37: CL used 0.0, remaining 12.0; EL used 0.0, remaining 20.0; PL used 0.0, remaining 15.0; LWP used 0.0, remaining 300.0
+2025-05-27T10:38:20.376+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-4] com.hr_management.service.LeaveService   : Applying leave for user: 37, type: CL
+2025-05-27T10:38:20.405+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-4] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [CL, HALF_DAY_CL]: 0.0
+2025-05-27T10:38:20.411+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-4] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [EL, HALF_DAY_EL]: 0.0
+2025-05-27T10:38:20.416+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-4] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [ML]: 0.0
+2025-05-27T10:38:20.423+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-4] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [PL]: 0.0
+2025-05-27T10:38:20.430+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-4] com.hr_management.service.LeaveService   : Calculated required days for leave application: null, type: CL: 6.0
+2025-05-27T10:38:20.439+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-4] com.hr_management.service.LeaveService   : Leave application saved: ID 56
+2025-05-27T10:38:20.489+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-7] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [CL, HALF_DAY_CL]: 0.0
+2025-05-27T10:38:20.495+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-7] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [EL, HALF_DAY_EL]: 0.0
+2025-05-27T10:38:20.500+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-7] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [ML]: 0.0
+2025-05-27T10:38:20.506+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-7] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [PL]: 0.0
+2025-05-27T10:38:20.515+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-7] com.hr_management.service.LeaveService   : Fetched leave balance for user 37: CL used 0.0, remaining 12.0; EL used 0.0, remaining 20.0; PL used 0.0, remaining 15.0; LWP used 0.0, remaining 300.0
+2025-05-27T10:39:33.932+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-10] com.hr_management.service.LeaveService   : Applying leave for user: 37, type: HALF_DAY_CL
+2025-05-27T10:39:33.961+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-10] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [CL, HALF_DAY_CL]: 0.0
+2025-05-27T10:39:33.968+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-10] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [EL, HALF_DAY_EL]: 0.0
+2025-05-27T10:39:33.975+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-10] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [ML]: 0.0
+2025-05-27T10:39:33.981+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-10] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [PL]: 0.0
+2025-05-27T10:39:33.989+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-10] com.hr_management.service.LeaveService   : Calculated required days for leave application: null, type: HALF_DAY_CL: 0.5
+2025-05-27T10:39:33.994+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-10] com.hr_management.service.LeaveService   : Leave application saved: ID 57
+2025-05-27T10:39:34.043+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-9] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [CL, HALF_DAY_CL]: 0.0
+2025-05-27T10:39:34.049+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-9] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [EL, HALF_DAY_EL]: 0.0
+2025-05-27T10:39:34.056+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-9] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [ML]: 0.0
+2025-05-27T10:39:34.061+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-9] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [PL]: 0.0
+2025-05-27T10:39:34.070+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-9] com.hr_management.service.LeaveService   : Fetched leave balance for user 37: CL used 0.0, remaining 12.0; EL used 0.0, remaining 20.0; PL used 0.0, remaining 15.0; LWP used 0.0, remaining 300.0
+2025-05-27T10:40:08.768+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-3] com.hr_management.service.LeaveService   : Applying leave for user: 37, type: EL
+2025-05-27T10:40:08.788+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-3] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [CL, HALF_DAY_CL]: 0.0
+2025-05-27T10:40:08.793+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-3] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [EL, HALF_DAY_EL]: 0.0
+2025-05-27T10:40:08.799+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-3] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [ML]: 0.0
+2025-05-27T10:40:08.806+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-3] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [PL]: 0.0
+2025-05-27T10:40:08.813+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-3] com.hr_management.service.LeaveService   : Calculated required days for leave application: null, type: EL: 7.0
+2025-05-27T10:40:08.819+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-3] com.hr_management.service.LeaveService   : Leave application saved: ID 58
+2025-05-27T10:40:08.865+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-1] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [CL, HALF_DAY_CL]: 0.0
+2025-05-27T10:40:08.872+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-1] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [EL, HALF_DAY_EL]: 0.0
+2025-05-27T10:40:08.878+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-1] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [ML]: 0.0
+2025-05-27T10:40:08.884+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-1] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [PL]: 0.0
+2025-05-27T10:40:08.892+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-1] com.hr_management.service.LeaveService   : Fetched leave balance for user 37: CL used 0.0, remaining 12.0; EL used 0.0, remaining 20.0; PL used 0.0, remaining 15.0; LWP used 0.0, remaining 300.0
+2025-05-27T10:40:22.260+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-10] com.hr_management.service.LeaveService   : Applying leave for user: 37, type: HALF_DAY_EL
+2025-05-27T10:40:22.289+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-10] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [CL, HALF_DAY_CL]: 0.0
+2025-05-27T10:40:22.295+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-10] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [EL, HALF_DAY_EL]: 0.0
+2025-05-27T10:40:22.300+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-10] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [ML]: 0.0
+2025-05-27T10:40:22.306+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-10] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [PL]: 0.0
+2025-05-27T10:40:22.311+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-10] com.hr_management.service.LeaveService   : Calculated required days for leave application: null, type: HALF_DAY_EL: 0.5
+2025-05-27T10:40:22.317+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-10] com.hr_management.service.LeaveService   : Leave application saved: ID 59
+2025-05-27T10:40:22.363+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-9] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [CL, HALF_DAY_CL]: 0.0
+2025-05-27T10:40:22.370+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-9] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [EL, HALF_DAY_EL]: 0.0
+2025-05-27T10:40:22.375+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-9] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [ML]: 0.0
+2025-05-27T10:40:22.380+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-9] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [PL]: 0.0
+2025-05-27T10:40:22.389+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-9] com.hr_management.service.LeaveService   : Fetched leave balance for user 37: CL used 0.0, remaining 12.0; EL used 0.0, remaining 20.0; PL used 0.0, remaining 15.0; LWP used 0.0, remaining 300.0
+2025-05-27T10:40:58.593+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-3] com.hr_management.service.LeaveService   : Applying leave for user: 37, type: PL
+2025-05-27T10:40:58.614+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-3] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [CL, HALF_DAY_CL]: 0.0
+2025-05-27T10:40:58.621+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-3] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [EL, HALF_DAY_EL]: 0.0
+2025-05-27T10:40:58.627+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-3] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [ML]: 0.0
+2025-05-27T10:40:58.633+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-3] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [PL]: 0.0
+2025-05-27T10:40:58.639+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-3] com.hr_management.service.LeaveService   : Calculated required days for leave application: null, type: PL: 15.0
+2025-05-27T10:40:58.644+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-3] com.hr_management.service.LeaveService   : Leave application saved: ID 60
+2025-05-27T10:40:58.690+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-1] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [CL, HALF_DAY_CL]: 0.0
+2025-05-27T10:40:58.696+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-1] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [EL, HALF_DAY_EL]: 0.0
+2025-05-27T10:40:58.703+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-1] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [ML]: 0.0
+2025-05-27T10:40:58.709+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-1] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [PL]: 0.0
+2025-05-27T10:40:58.719+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-1] com.hr_management.service.LeaveService   : Fetched leave balance for user 37: CL used 0.0, remaining 12.0; EL used 0.0, remaining 20.0; PL used 0.0, remaining 15.0; LWP used 0.0, remaining 300.0
+2025-05-27T10:41:29.405+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-10] com.hr_management.service.LeaveService   : Applying leave for user: 37, type: LWP
+2025-05-27T10:41:29.424+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-10] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [CL, HALF_DAY_CL]: 0.0
+2025-05-27T10:41:29.431+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-10] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [EL, HALF_DAY_EL]: 0.0
+2025-05-27T10:41:29.435+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-10] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [ML]: 0.0
+2025-05-27T10:41:29.440+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-10] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [PL]: 0.0
+2025-05-27T10:41:29.447+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-10] com.hr_management.service.LeaveService   : Calculated required days for leave application: null, type: LWP: 5.0
+2025-05-27T10:41:29.452+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-10] com.hr_management.service.LeaveService   : Leave application saved: ID 61
+2025-05-27T10:41:29.498+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-9] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [CL, HALF_DAY_CL]: 0.0
+2025-05-27T10:41:29.504+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-9] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [EL, HALF_DAY_EL]: 0.0
+2025-05-27T10:41:29.509+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-9] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [ML]: 0.0
+2025-05-27T10:41:29.516+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-9] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [PL]: 0.0
+2025-05-27T10:41:29.523+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-9] com.hr_management.service.LeaveService   : Fetched leave balance for user 37: CL used 0.0, remaining 12.0; EL used 0.0, remaining 20.0; PL used 0.0, remaining 15.0; LWP used 0.0, remaining 300.0
+2025-05-27T10:41:44.648+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-3] com.hr_management.service.LeaveService   : Applying leave for user: 37, type: HALF_DAY_LWP
+2025-05-27T10:41:44.672+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-3] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [CL, HALF_DAY_CL]: 0.0
+2025-05-27T10:41:44.678+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-3] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [EL, HALF_DAY_EL]: 0.0
+2025-05-27T10:41:44.684+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-3] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [ML]: 0.0
+2025-05-27T10:41:44.690+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-3] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [PL]: 0.0
+2025-05-27T10:41:44.698+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-3] com.hr_management.service.LeaveService   : Calculated required days for leave application: null, type: HALF_DAY_LWP: 0.5
+2025-05-27T10:41:44.703+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-3] com.hr_management.service.LeaveService   : Leave application saved: ID 62
+2025-05-27T10:41:44.750+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-1] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [CL, HALF_DAY_CL]: 0.0
+2025-05-27T10:41:44.755+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-1] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [EL, HALF_DAY_EL]: 0.0
+2025-05-27T10:41:44.760+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-1] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [ML]: 0.0
+2025-05-27T10:41:44.766+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-1] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [PL]: 0.0
+2025-05-27T10:41:44.774+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-1] com.hr_management.service.LeaveService   : Fetched leave balance for user 37: CL used 0.0, remaining 12.0; EL used 0.0, remaining 20.0; PL used 0.0, remaining 15.0; LWP used 0.0, remaining 300.0
+2025-05-27T10:41:59.117+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-2] com.hr_management.service.LeaveService   : Approving leave application with ID: 56
+2025-05-27T10:41:59.152+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-2] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [CL, HALF_DAY_CL]: 6.0
+2025-05-27T10:41:59.158+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-2] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [EL, HALF_DAY_EL]: 0.0
+2025-05-27T10:41:59.164+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-2] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [ML]: 0.0
+2025-05-27T10:41:59.169+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-2] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [PL]: 0.0
+2025-05-27T10:41:59.182+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-2] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [CL, HALF_DAY_CL]: 6.0
+2025-05-27T10:41:59.188+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-2] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [EL, HALF_DAY_EL]: 0.0
+2025-05-27T10:41:59.195+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-2] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [ML]: 0.0
+2025-05-27T10:41:59.200+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-2] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [PL]: 0.0
+2025-05-27T10:41:59.207+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-2] com.hr_management.service.LeaveService   : Leave approved for user: 37. Leave ID: 56, Type: CL, Days: 6.0
+2025-05-27T10:41:59.207+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-2] com.hr_management.service.LeaveService   : Updated balances - CL: used 6.0, remaining 6.0; EL: used 0.0, remaining 20.0; PL: used 0.0, remaining 15.0; LWP: used 0.0, remaining 300.0
+2025-05-27T10:42:00.075+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-1] com.hr_management.service.LeaveService   : Approving leave application with ID: 57
+2025-05-27T10:42:00.094+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-1] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [CL, HALF_DAY_CL]: 6.5
+2025-05-27T10:42:00.102+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-1] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [EL, HALF_DAY_EL]: 0.0
+2025-05-27T10:42:00.107+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-1] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [ML]: 0.0
+2025-05-27T10:42:00.111+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-1] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [PL]: 0.0
+2025-05-27T10:42:00.118+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-1] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [CL, HALF_DAY_CL]: 6.5
+2025-05-27T10:42:00.129+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-1] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [EL, HALF_DAY_EL]: 0.0
+2025-05-27T10:42:00.134+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-1] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [ML]: 0.0
+2025-05-27T10:42:00.134+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-1] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [PL]: 0.0
+2025-05-27T10:42:00.145+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-1] com.hr_management.service.LeaveService   : Leave approved for user: 37. Leave ID: 57, Type: HALF_DAY_CL, Days: 0.5
+2025-05-27T10:42:00.145+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-1] com.hr_management.service.LeaveService   : Updated balances - CL: used 6.5, remaining 5.5; EL: used 0.0, remaining 20.0; PL: used 0.0, remaining 15.0; LWP: used 0.0, remaining 300.0
+2025-05-27T10:42:00.878+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-9] com.hr_management.service.LeaveService   : Approving leave application with ID: 58
+2025-05-27T10:42:00.897+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-9] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [CL, HALF_DAY_CL]: 6.5
+2025-05-27T10:42:00.905+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-9] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [EL, HALF_DAY_EL]: 7.0
+2025-05-27T10:42:00.913+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-9] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [ML]: 0.0
+2025-05-27T10:42:00.918+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-9] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [PL]: 0.0
+2025-05-27T10:42:00.918+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-9] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [CL, HALF_DAY_CL]: 6.5
+2025-05-27T10:42:00.934+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-9] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [EL, HALF_DAY_EL]: 7.0
+2025-05-27T10:42:00.934+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-9] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [ML]: 0.0
+2025-05-27T10:42:00.934+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-9] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [PL]: 0.0
+2025-05-27T10:42:00.954+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-9] com.hr_management.service.LeaveService   : Leave approved for user: 37. Leave ID: 58, Type: EL, Days: 7.0
+2025-05-27T10:42:00.954+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-9] com.hr_management.service.LeaveService   : Updated balances - CL: used 6.5, remaining 5.5; EL: used 7.0, remaining 13.0; PL: used 0.0, remaining 15.0; LWP: used 0.0, remaining 300.0
+2025-05-27T10:42:01.654+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-2] com.hr_management.service.LeaveService   : Approving leave application with ID: 59
+2025-05-27T10:42:01.673+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-2] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [CL, HALF_DAY_CL]: 6.5
+2025-05-27T10:42:01.673+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-2] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [EL, HALF_DAY_EL]: 7.5
+2025-05-27T10:42:01.685+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-2] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [ML]: 0.0
+2025-05-27T10:42:01.685+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-2] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [PL]: 0.0
+2025-05-27T10:42:01.701+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-2] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [CL, HALF_DAY_CL]: 6.5
+2025-05-27T10:42:01.705+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-2] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [EL, HALF_DAY_EL]: 7.5
+2025-05-27T10:42:01.712+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-2] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [ML]: 0.0
+2025-05-27T10:42:01.717+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-2] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [PL]: 0.0
+2025-05-27T10:42:01.717+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-2] com.hr_management.service.LeaveService   : Leave approved for user: 37. Leave ID: 59, Type: HALF_DAY_EL, Days: 0.5
+2025-05-27T10:42:01.717+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-2] com.hr_management.service.LeaveService   : Updated balances - CL: used 6.5, remaining 5.5; EL: used 7.5, remaining 12.5; PL: used 0.0, remaining 15.0; LWP: used 0.0, remaining 300.0
+2025-05-27T10:42:02.382+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-1] com.hr_management.service.LeaveService   : Approving leave application with ID: 60
+2025-05-27T10:42:02.392+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-1] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [CL, HALF_DAY_CL]: 6.5
+2025-05-27T10:42:02.406+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-1] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [EL, HALF_DAY_EL]: 7.5
+2025-05-27T10:42:02.417+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-1] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [ML]: 0.0
+2025-05-27T10:42:02.417+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-1] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [PL]: 15.0
+2025-05-27T10:42:02.422+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-1] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [CL, HALF_DAY_CL]: 6.5
+2025-05-27T10:42:02.422+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-1] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [EL, HALF_DAY_EL]: 7.5
+2025-05-27T10:42:02.439+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-1] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [ML]: 0.0
+2025-05-27T10:42:02.439+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-1] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [PL]: 15.0
+2025-05-27T10:42:02.439+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-1] com.hr_management.service.LeaveService   : Leave approved for user: 37. Leave ID: 60, Type: PL, Days: 15.0
+2025-05-27T10:42:02.439+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-1] com.hr_management.service.LeaveService   : Updated balances - CL: used 6.5, remaining 5.5; EL: used 7.5, remaining 12.5; PL: used 15.0, remaining 0.0; LWP: used 0.0, remaining 300.0
+2025-05-27T10:42:03.031+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-8] com.hr_management.service.LeaveService   : Approving leave application with ID: 61
+2025-05-27T10:42:03.042+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-8] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [CL, HALF_DAY_CL]: 6.5
+2025-05-27T10:42:03.055+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-8] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [EL, HALF_DAY_EL]: 7.5
+2025-05-27T10:42:03.055+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-8] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [ML]: 0.0
+2025-05-27T10:42:03.062+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-8] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [PL]: 15.0
+2025-05-27T10:42:03.070+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-8] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [CL, HALF_DAY_CL]: 6.5
+2025-05-27T10:42:03.070+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-8] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [EL, HALF_DAY_EL]: 7.5
+2025-05-27T10:42:03.082+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-8] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [ML]: 0.0
+2025-05-27T10:42:03.086+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-8] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [PL]: 15.0
+2025-05-27T10:42:03.086+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-8] com.hr_management.service.LeaveService   : Leave approved for user: 37. Leave ID: 61, Type: LWP, Days: 5.0
+2025-05-27T10:42:03.086+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-8] com.hr_management.service.LeaveService   : Updated balances - CL: used 6.5, remaining 5.5; EL: used 7.5, remaining 12.5; PL: used 15.0, remaining 0.0; LWP: used 5.0, remaining 295.0
+2025-05-27T10:42:03.917+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-3] com.hr_management.service.LeaveService   : Approving leave application with ID: 62
+2025-05-27T10:42:03.931+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-3] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [CL, HALF_DAY_CL]: 6.5
+2025-05-27T10:42:03.939+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-3] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [EL, HALF_DAY_EL]: 7.5
+2025-05-27T10:42:03.944+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-3] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [ML]: 0.0
+2025-05-27T10:42:03.953+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-3] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [PL]: 15.0
+2025-05-27T10:42:03.953+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-3] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [CL, HALF_DAY_CL]: 6.5
+2025-05-27T10:42:03.953+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-3] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [EL, HALF_DAY_EL]: 7.5
+2025-05-27T10:42:03.969+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-3] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [ML]: 0.0
+2025-05-27T10:42:03.969+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-3] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [PL]: 15.0
+2025-05-27T10:42:03.969+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-3] com.hr_management.service.LeaveService   : Leave approved for user: 37. Leave ID: 62, Type: HALF_DAY_LWP, Days: 0.5
+2025-05-27T10:42:03.984+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-3] com.hr_management.service.LeaveService   : Updated balances - CL: used 6.5, remaining 5.5; EL: used 7.5, remaining 12.5; PL: used 15.0, remaining 0.0; LWP: used 5.5, remaining 294.5
+2025-05-27T10:42:13.009+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-4] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [CL, HALF_DAY_CL]: 6.5
+2025-05-27T10:42:13.012+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-4] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [EL, HALF_DAY_EL]: 7.5
+2025-05-27T10:42:13.016+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-4] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [ML]: 0.0
+2025-05-27T10:42:13.022+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-4] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [PL]: 15.0
+2025-05-27T10:42:13.032+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-4] com.hr_management.service.LeaveService   : Fetched leave balance for user 37: CL used 6.5, remaining 5.5; EL used 7.5, remaining 12.5; PL used 15.0, remaining 0.0; LWP used 5.5, remaining 294.5
+2025-05-27T10:42:13.060+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-2] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [CL, HALF_DAY_CL]: 6.5
+2025-05-27T10:42:13.064+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-2] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [EL, HALF_DAY_EL]: 7.5
+2025-05-27T10:42:13.064+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-2] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [ML]: 0.0
+2025-05-27T10:42:13.075+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-2] com.hr_management.service.LeaveService   : Total used days for user 37 and leave types [PL]: 15.0
+2025-05-27T10:42:13.080+05:30  INFO 29284 --- [http-nio-0.0.0.0-8081-exec-2] com.hr_management.service.LeaveService   : Fetched leave balance for user 37: CL used 6.5, remaining 5.5; EL used 7.5, remaining 12.5; PL used 15.0, remaining 0.0; LWP used 5.5, remaining 294.5
