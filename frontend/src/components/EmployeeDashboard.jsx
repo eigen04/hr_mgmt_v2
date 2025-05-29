@@ -24,8 +24,8 @@ export default function EmployeeDashboard() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const navigate = useNavigate();
 
-    // Use current date dynamically (May 26, 2025)
-    const today = new Date().toISOString().split('T')[0]; // 2025-05-26
+    // Use current date dynamically (May 28, 2025)
+    const today = new Date().toISOString().split('T')[0]; // 2025-05-28
 
     useEffect(() => {
         const fetchUserData = async () => {
@@ -151,12 +151,12 @@ export default function EmployeeDashboard() {
         let currentDate = new Date(startDate);
         let days = 0;
 
-        // For EL, ML, PL, and LWP, count all days including holidays
-        const countHolidays = leaveType === 'EL' || leaveType === 'ML' || leaveType === 'PL' || leaveType === 'LWP';
+        // For EL, ML, and PL, count all days; for CL and LWP, exclude non-working days
+        const countHolidays = leaveType === 'EL' || leaveType === 'ML' || leaveType === 'PL';
 
         while (currentDate <= end) {
             if (countHolidays || !isNonWorkingDay(currentDate)) {
-                days += 1; // Count all days for EL, ML, PL, LWP; only working days for CL
+                days += 1; // Count all days for EL, ML, PL; only working days for CL and LWP
             }
             currentDate.setDate(currentDate.getDate() + 1);
         }
@@ -729,7 +729,7 @@ export default function EmployeeDashboard() {
                             </div>
                             <div className="mb-4">
                                 <p className="text-sm text-gray-600">
-                                    Total leave days (excluding second/fourth Saturdays and Sundays for CL): <span className="font-bold">{leaveDays.toFixed(1)}</span>
+                                    Total leave days (excluding second/fourth Saturdays and Sundays for CL and LWP): <span className="font-bold">{leaveDays.toFixed(1)}</span>
                                 </p>
                             </div>
                             <button

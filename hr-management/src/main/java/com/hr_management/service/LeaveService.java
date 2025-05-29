@@ -401,22 +401,15 @@ public class LeaveService {
         LocalDate currentDate = startDate;
         double totalDays = 0.0;
 
-        // Determine if holidays should be counted based on leave type
-        boolean countHolidays = leaveType.equals("EL") || leaveType.equals("LWP") || leaveType.equals("HALF_DAY_LWP");
+        // For EL, count all days; for CL and LWP, exclude non-working days
+        boolean countHolidays = leaveType.equals("EL");
 
         while (!currentDate.isAfter(endDate)) {
-            if (countHolidays) {
-                // For EL and LWP: Count all days, including holidays
+            if (countHolidays || !isNonWorkingDay(currentDate)) {
                 totalDays += 1.0;
                 logger.debug("Counting day for {}: {} (Day of week: {})", leaveType, currentDate, currentDate.getDayOfWeek());
             } else {
-                // For CL: Count only working days, exclude holidays
-                if (!isNonWorkingDay(currentDate)) {
-                    totalDays += 1.0;
-                    logger.debug("Counting working day for {}: {} (Day of week: {})", leaveType, currentDate, currentDate.getDayOfWeek());
-                } else {
-                    logger.debug("Skipping non-working day for {}: {} (Day of week: {})", leaveType, currentDate, currentDate.getDayOfWeek());
-                }
+                logger.debug("Skipping non-working day for {}: {} (Day of week: {})", leaveType, currentDate, currentDate.getDayOfWeek());
             }
             currentDate = currentDate.plusDays(1);
         }

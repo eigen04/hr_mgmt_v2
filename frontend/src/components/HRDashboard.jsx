@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 
 export default function HRDashboard() {
   const navigate = useNavigate();
@@ -149,51 +149,99 @@ export default function HRDashboard() {
       }
 
       const data = await response.json();
-      console.log('Raw employees data:', data);
+      console.log('Raw employees data:', JSON.stringify(data, null, 2));
 
       const formattedEmployees = data.map(employee => {
         const getDatesInRange = (startDate, endDate) => {
-          console.log('Processing date range:', startDate, 'to', endDate);
+          console.log(`Processing date range for ${employee.fullName}: ${startDate} to ${endDate}`);
           const dates = [];
           let currentDate = new Date(startDate);
           const end = new Date(endDate);
+          if (isNaN(currentDate.getTime()) || isNaN(end.getTime())) {
+            console.error(`Invalid date range: ${startDate} to ${endDate}`);
+            return dates;
+          }
           while (currentDate <= end) {
-            dates.push(`${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`);
+            const formattedDate = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
+            dates.push(formattedDate);
+            console.log(`Added date: ${formattedDate}`);
             currentDate.setDate(currentDate.getDate() + 1);
           }
           return dates;
         };
 
         const mapLeaves = (applications, leaveType) => {
-          return applications
-            ?.filter(app => {
-              let normalizedLeaveType = app.leaveType.toUpperCase();
-              if (normalizedLeaveType === 'PL') normalizedLeaveType = 'PATERNITY';
-              if (normalizedLeaveType === 'ML') normalizedLeaveType = 'MATERNITY';
-              return normalizedLeaveType === leaveType && app.status === 'APPROVED';
-            })
-            .flatMap(app => {
-              const dates = getDatesInRange(app.startDate, app.endDate);
-              return dates.map(date => ({
-                date,
-                isHalfDay: ['HALF_DAY_CL', 'HALF_DAY_EL'].includes(app.leaveType.toUpperCase()),
-                leaveType: app.leaveType.toUpperCase(),
-              }));
-            }) || [];
+          console.log(`Mapping leaves for ${employee.fullName}, type: ${leaveType}, applications:`, applications);
+          if (!applications || !Array.isArray(applications)) {
+            console.warn(`No valid leave applications for ${employee.fullName}, type: ${leaveType}`);
+            return [];
+          }
+
+          const filteredApps = applications.filter(app => {
+            const appLeaveType = app.leaveType ? app.leaveType.toUpperCase() : '';
+            const typeMapping = {
+              'CL': 'CL',
+              'CASUAL': 'CL',
+              'EL': 'EL',
+              'EARNED': 'EL',
+              'LWP': 'LWP',
+              'PL': 'PATERNITY',
+              'ML': 'MATERNITY',
+              'HALF_DAY_CL': 'HALF_DAY_CL',
+              'HALF_DAY_EL': 'HALF_DAY_EL',
+              'HALF_DAY_LWP': 'HALF_DAY_LWP',
+            };
+            const normalizedLeaveType = typeMapping[appLeaveType] || appLeaveType;
+            console.log(`Comparing appLeaveType: ${appLeaveType}, normalized: ${normalizedLeaveType}, target: ${leaveType}, status: ${app.status}`);
+            return normalizedLeaveType === leaveType && app.status === 'APPROVED';
+          });
+
+          const uniqueDates = new Set();
+          filteredApps.forEach(app => {
+            const dates = getDatesInRange(app.startDate, app.endDate);
+            dates.forEach(date => {
+              // Only include working days for CL, LWP, and their half-day variants
+              if (['CL', 'LWP', 'HALF_DAY_CL', 'HALF_DAY_LWP'].includes(leaveType)) {
+                if (isWorkingDay(date)) {
+                  uniqueDates.add(date);
+                  console.log(`Including working day ${date} for leave type ${leaveType}`);
+                } else {
+                  console.log(`Excluding non-working day ${date} for leave type ${leaveType}`);
+                }
+              } else {
+                uniqueDates.add(date);
+                console.log(`Including day ${date} for leave type ${leaveType} (no working day check)`);
+              }
+            });
+          });
+
+          const leaveEntries = Array.from(uniqueDates).map(date => ({
+            date,
+            isHalfDay: leaveType.includes('HALF_DAY'),
+            leaveType: leaveType,
+          }));
+
+          console.log(`Unique leave entries for ${employee.fullName}, type: ${leaveType}:`, leaveEntries);
+          return leaveEntries;
         };
+
+        const employeeLeaves = {
+          cl: mapLeaves(employee.leaveApplications, 'CL'),
+          el: mapLeaves(employee.leaveApplications, 'EL'),
+          lwp: mapLeaves(employee.leaveApplications, 'LWP'),
+          maternity: mapLeaves(employee.leaveApplications, 'MATERNITY'),
+          paternity: mapLeaves(employee.leaveApplications, 'PATERNITY'),
+          half_day_cl: mapLeaves(employee.leaveApplications, 'HALF_DAY_CL'),
+          half_day_el: mapLeaves(employee.leaveApplications, 'HALF_DAY_EL'),
+          half_day_lwp: mapLeaves(employee.leaveApplications, 'HALF_DAY_LWP'),
+        };
+        console.log(`Employee ${employee.fullName} leaves:`, JSON.stringify(employeeLeaves, null, 2));
 
         return {
           id: employee.id,
           name: employee.fullName || 'Unnamed Employee',
           position: employee.role || 'Employee',
-          leaves: {
-            cl: mapLeaves(employee.leaveApplications, 'CL'),
-            el: mapLeaves(employee.leaveApplications, 'EL'),
-            maternity: mapLeaves(employee.leaveApplications, 'MATERNITY'),
-            paternity: mapLeaves(employee.leaveApplications, 'PATERNITY'),
-            half_day_cl: mapLeaves(employee.leaveApplications, 'HALF_DAY_CL'),
-            half_day_el: mapLeaves(employee.leaveApplications, 'HALF_DAY_EL'),
-          },
+          leaves: employeeLeaves,
         };
       });
 
@@ -204,6 +252,129 @@ export default function HRDashboard() {
       setEmployeesInDepartment([]);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const isWorkingDay = (dateStr) => {
+    if (!dateStr || typeof dateStr !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      console.error(`Invalid date format: ${dateStr}`);
+      return false;
+    }
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) {
+      console.error(`Invalid date: ${dateStr}`);
+      return false;
+    }
+    const day = date.getDay();
+    const dateOfMonth = date.getDate();
+    const weekOfMonth = Math.floor((dateOfMonth - 1) / 7) + 1;
+    if (day === 0) {
+      console.log(`Excluding ${dateStr}: Sunday (Day=${day}, Date=${dateOfMonth}, WeekOfMonth=${weekOfMonth})`);
+      return false;
+    }
+    if (day === 6) {
+      const isSecondOrFourthSaturday = weekOfMonth === 2 || weekOfMonth === 4;
+      console.log(`Checking ${dateStr}: Saturday (Day=${day}, Date=${dateOfMonth}, WeekOfMonth=${weekOfMonth}, Excluded=${isSecondOrFourthSaturday})`);
+      return !isSecondOrFourthSaturday;
+    }
+    console.log(`Including ${dateStr}: Working day (Day=${day}, Date=${dateOfMonth}, WeekOfMonth=${weekOfMonth})`);
+    return true;
+  };
+
+  const handleExportExcel = async (deptId) => {
+    const dept = departmentData.find(d => d.id === deptId);
+    if (!dept || !employeesInDepartment.length) {
+      alert('No data available to export.');
+      return;
+    }
+
+    try {
+      const year = currentMonth.getFullYear();
+      const month = String(currentMonth.getMonth() + 1).padStart(2, '0');
+      const monthRegex = new RegExp(`^${year}-${month}`);
+
+      const reportData = employeesInDepartment.map(employee => {
+        const countLeaves = (leaves, leaveType, isHalfDayType = false) => {
+          if (!Array.isArray(leaves)) {
+            console.warn(`Leaves array is invalid for ${employee.name}, type: ${leaveType}`);
+            return 0;
+          }
+          const filteredLeaves = leaves.filter(leave => {
+            if (!leave || !leave.date || !leave.leaveType) {
+              console.warn(`Invalid leave entry for ${employee.name}:`, leave);
+              return false;
+            }
+            const isInMonth = monthRegex.test(leave.date);
+            const shouldCheckWorkingDay = ['CL', 'HALF_DAY_CL', 'LWP', 'HALF_DAY_LWP'].includes(leaveType);
+            const isValidDay = shouldCheckWorkingDay ? isWorkingDay(leave.date) : true;
+            console.log(`Evaluating leave for ${employee.name}, date: ${leave.date}, type: ${leaveType}, inMonth: ${isInMonth}, isWorkingDay: ${isValidDay}`);
+            return isInMonth && isValidDay;
+          });
+          return filteredLeaves.reduce((total, leave) => {
+            const value = leave.isHalfDay || isHalfDayType ? 0.5 : 1;
+            console.log(`Counting leave for ${employee.name}, date: ${leave.date}, type: ${leave.leaveType}, isHalfDay: ${leave.isHalfDay}, value: ${value}, running total: ${total + value}`);
+            return total + value;
+          }, 0);
+        };
+
+        const clCount = countLeaves(employee.leaves.cl, 'CL', false);
+        const elCount = countLeaves(employee.leaves.el, 'EL', false);
+        const lwpCount = countLeaves(employee.leaves.lwp, 'LWP', false);
+        const maternityCount = countLeaves(employee.leaves.maternity, 'MATERNITY', false);
+        const paternityCount = countLeaves(employee.leaves.paternity, 'PATERNITY', false);
+        const halfDayClCount = countLeaves(employee.leaves.half_day_cl, 'HALF_DAY_CL', true);
+        const halfDayElCount = countLeaves(employee.leaves.half_day_el, 'HALF_DAY_EL', true);
+        const halfDayLwpCount = countLeaves(employee.leaves.half_day_lwp, 'HALF_DAY_LWP', true);
+
+        const totalLeaves = clCount + elCount + lwpCount + maternityCount + paternityCount + halfDayClCount + halfDayElCount + halfDayLwpCount;
+
+        console.log(`Exporting for ${employee.name}: CL=${clCount}, EL=${elCount}, LWP=${lwpCount}, Maternity=${maternityCount}, Paternity=${paternityCount}, HalfDayCL=${halfDayClCount}, HalfDayEL=${halfDayElCount}, HalfDayLWP=${halfDayLwpCount}, Total=${totalLeaves}`);
+
+        return {
+          'Employee Name': employee.name,
+          'Casual Leave': clCount,
+          'Earned Leave': elCount,
+          'Leave Without Pay': lwpCount,
+          'Maternity Leave': maternityCount,
+          'Paternity Leave': paternityCount,
+          'Half Day Casual Leave': halfDayClCount,
+          'Half Day Earned Leave': halfDayElCount,
+          'Half Day Leave Without Pay': halfDayLwpCount,
+          'Total Leaves': totalLeaves,
+        };
+      });
+
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Leave Report');
+
+      // Add headers
+      const headers = Object.keys(reportData[0]);
+      worksheet.columns = headers.map(header => ({
+        header,
+        key: header,
+        width: header === 'Employee Name' ? 20 : 15,
+      }));
+
+      // Add rows
+      reportData.forEach(data => {
+        worksheet.addRow(data);
+      });
+
+      // Generate file name
+      const monthName = currentMonth.toLocaleString('default', { month: 'long' });
+      const fileName = `${dept.name}_Leave_Report_${monthName}_${year}.xlsx`;
+
+      // Save file
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = fileName;
+      link.click();
+      URL.revokeObjectURL(link.href);
+    } catch (error) {
+      console.error('Error exporting Excel file:', error);
+      alert('Failed to export leave report. Please try again.');
     }
   };
 
@@ -233,64 +404,6 @@ export default function HRDashboard() {
     const newMonth = new Date(currentMonth);
     newMonth.setMonth(newMonth.getMonth() + increment);
     setCurrentMonth(newMonth);
-  };
-
-  const handleExportExcel = (deptId) => {
-    const dept = departmentData.find(d => d.id === deptId);
-    if (!dept || !employeesInDepartment.length) {
-      alert('No data available to export.');
-      return;
-    }
-
-    try {
-      const year = currentMonth.getFullYear();
-      const month = String(currentMonth.getMonth() + 1).padStart(2, '0');
-      const monthRegex = new RegExp(`^${year}-${month}`);
-
-      const reportData = employeesInDepartment.map(employee => {
-        const clCount = employee.leaves.cl?.filter(leave => monthRegex.test(leave.date)).length || 0;
-        const elCount = employee.leaves.el?.filter(leave => monthRegex.test(leave.date)).length || 0;
-        const maternityCount = employee.leaves.maternity?.filter(leave => monthRegex.test(leave.date)).length || 0;
-        const paternityCount = employee.leaves.paternity?.filter(leave => monthRegex.test(leave.date)).length || 0;
-        const halfDayClCount = employee.leaves.half_day_cl?.filter(leave => monthRegex.test(leave.date)).length || 0;
-        const halfDayElCount = employee.leaves.half_day_el?.filter(leave => monthRegex.test(leave.date)).length || 0;
-        const totalLeaves = clCount + elCount + maternityCount + paternityCount + halfDayClCount + halfDayElCount;
-
-        return {
-          'Employee Name': employee.name,
-          'Casual Leave': clCount,
-          'Earned Leave': elCount,
-          'Maternity Leave': maternityCount,
-          'Paternity Leave': paternityCount,
-          'Half Day Casual Leave': halfDayClCount,
-          'Half Day Earned Leave': halfDayElCount,
-          'Total Leaves': totalLeaves,
-        };
-      });
-
-      const worksheet = XLSX.utils.json_to_sheet(reportData);
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Leave Report');
-
-      // Set column widths
-      worksheet['!cols'] = [
-        { wch: 20 }, // Employee Name
-        { wch: 15 }, // Casual Leave
-        { wch: 15 }, // Earned Leave
-        { wch: 15 }, // Maternity Leave
-        { wch: 15 }, // Paternity Leave
-        { wch: 20 }, // Half Day Casual Leave
-        { wch: 20 }, // Half Day Earned Leave
-        { wch: 15 }, // Total Leaves
-      ];
-
-      const monthName = currentMonth.toLocaleString('default', { month: 'long' });
-      const fileName = `${dept.name}_Leave_Report_${monthName}_${year}.xlsx`;
-      XLSX.writeFile(workbook, fileName, { compression: true });
-    } catch (error) {
-      console.error('Error exporting Excel file:', error);
-      alert('Failed to export leave report. Please try again.');
-    }
   };
 
   const backToOverview = () => {
@@ -325,10 +438,12 @@ export default function HRDashboard() {
 
       const clLeave = selectedEmployee.leaves.cl?.find(leave => leave.date === date);
       const elLeave = selectedEmployee.leaves.el?.find(leave => leave.date === date);
+      const lwpLeave = selectedEmployee.leaves.lwp?.find(leave => leave.date === date);
       const maternityLeave = selectedEmployee.leaves.maternity?.find(leave => leave.date === date);
       const paternityLeave = selectedEmployee.leaves.paternity?.find(leave => leave.date === date);
       const halfDayClLeave = selectedEmployee.leaves.half_day_cl?.find(leave => leave.date === date);
       const halfDayElLeave = selectedEmployee.leaves.half_day_el?.find(leave => leave.date === date);
+      const halfDayLwpLeave = selectedEmployee.leaves.half_day_lwp?.find(leave => leave.date === date);
 
       if (halfDayClLeave) {
         leaveType = 'half_day_cl';
@@ -336,12 +451,18 @@ export default function HRDashboard() {
       } else if (halfDayElLeave) {
         leaveType = 'half_day_el';
         isHalfDay = halfDayElLeave.isHalfDay;
+      } else if (halfDayLwpLeave) {
+        leaveType = 'half_day_lwp';
+        isHalfDay = halfDayLwpLeave.isHalfDay;
       } else if (clLeave) {
         leaveType = 'cl';
         isHalfDay = clLeave.isHalfDay;
       } else if (elLeave) {
         leaveType = 'el';
         isHalfDay = elLeave.isHalfDay;
+      } else if (lwpLeave) {
+        leaveType = 'lwp';
+        isHalfDay = lwpLeave.isHalfDay;
       } else if (maternityLeave) {
         leaveType = 'maternity';
         isHalfDay = maternityLeave.isHalfDay;
@@ -350,6 +471,7 @@ export default function HRDashboard() {
         isHalfDay = paternityLeave.isHalfDay;
       }
 
+      console.log(`Calendar day ${date} for ${selectedEmployee.name}: leaveType=${leaveType}, isHalfDay=${isHalfDay}`);
       calendarDays.push({ day, leaveType, isHalfDay });
     }
 
@@ -362,36 +484,60 @@ export default function HRDashboard() {
     const year = currentMonth.getFullYear();
 
     const getLeaveColor = (type, isHalfDay) => {
-      switch(type) {
-        case 'cl': return 'bg-yellow-100 border-yellow-400 text-yellow-800';
-        case 'el': return 'bg-green-100 border-green-400 text-green-800';
-        case 'maternity': return 'bg-pink-100 border-pink-400 text-pink-800';
-        case 'paternity': return 'bg-blue-100 border-blue-400 text-blue-800';
-        case 'half_day_cl': return 'bg-orange-100 border-orange-400 text-orange-800';
-        case 'half_day_el': return 'bg-teal-100 border-teal-400 text-teal-800';
-        default: return 'bg-white hover:bg-gray-50';
+      switch (type) {
+        case 'cl':
+          return 'bg-yellow-100 border-yellow-400 text-yellow-800';
+        case 'el':
+          return 'bg-green-100 border-green-400 text-green-800';
+        case 'lwp':
+          return 'bg-gray-100 border-gray-400 text-gray-800';
+        case 'maternity':
+          return 'bg-pink-100 border-pink-400 text-pink-800';
+        case 'paternity':
+          return 'bg-blue-100 border-blue-400 text-blue-800';
+        case 'half_day_cl':
+          return 'bg-orange-100 border-orange-400 text-orange-800';
+        case 'half_day_el':
+          return 'bg-teal-100 border-teal-400 text-teal-800';
+        case 'half_day_lwp':
+          return 'bg-gray-300 border-gray-600 text-gray-900';
+        default:
+          return 'bg-white hover:bg-gray-50';
       }
     };
 
     const getLeaveTooltip = (type, isHalfDay) => {
-      switch(type) {
-        case 'cl': return 'Casual Leave';
-        case 'el': return 'Earned Leave';
-        case 'maternity': return 'Maternity Leave';
-        case 'paternity': return 'Paternity Leave';
-        case 'half_day_cl': return 'Half Day Casual Leave';
-        case 'half_day_el': return 'Half Day Earned Leave';
-        default: return '';
+      switch (type) {
+        case 'cl':
+          return 'Casual Leave';
+        case 'el':
+          return 'Earned Leave';
+        case 'lwp':
+          return 'Leave Without Pay';
+        case 'maternity':
+          return 'Maternity Leave';
+        case 'paternity':
+          return 'Paternity Leave';
+        case 'half_day_cl':
+          return 'Half Day Casual Leave';
+        case 'half_day_el':
+          return 'Half Day Earned Leave';
+        case 'half_day_lwp':
+          return 'Half Day Leave Without Pay';
+        default:
+          return '';
       }
     };
 
     const leaveTypes = [
       { type: 'cl', label: 'Casual Leave', bgColor: 'bg-yellow-100', borderColor: 'border-yellow-400' },
       { type: 'el', label: 'Earned Leave', bgColor: 'bg-green-100', borderColor: 'border-green-400' },
+      { type: 'lwp', label: 'Leave Without Pay', bgColor: 'bg-gray-100', borderColor: 'border-gray-400' },
       { type: 'maternity', label: 'Maternity Leave', bgColor: 'bg-pink-100', borderColor: 'border-pink-400' },
       { type: 'paternity', label: 'Paternity Leave', bgColor: 'bg-blue-100', borderColor: 'border-blue-400' },
       { type: 'half_day_cl', label: 'Half Day Casual Leave', bgColor: 'bg-orange-100', borderColor: 'border-orange-400' },
       { type: 'half_day_el', label: 'Half Day Earned Leave', bgColor: 'bg-teal-100', borderColor: 'border-teal-400' },
+      { type: 'half_day_lwp', label: 'Half Day Leave Without Pay', bgColor: 'bg-gray-300', borderColor: 'border-gray-600' },
     ];
 
     const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -401,7 +547,7 @@ export default function HRDashboard() {
         <div className="flex justify-between items-center mb-6">
           <h3 className="text-lg font-semibold text-gray-800">{monthName} {year}</h3>
           <div className="flex space-x-2">
-            <button 
+            <button
               onClick={() => handleMonthChange(-1)}
               className="p-2 rounded-full hover:bg-gray-200 transition duration-200"
               aria-label="Previous month"
@@ -410,7 +556,7 @@ export default function HRDashboard() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
             </button>
-            <button 
+            <button
               onClick={() => handleMonthChange(1)}
               className="p-2 rounded-full hover:bg-gray-200 transition duration-200"
               aria-label="Next month"
@@ -430,8 +576,8 @@ export default function HRDashboard() {
 
         <div className="grid grid-cols-7 gap-1">
           {calendarDays.map((day, index) => {
-            const key = day.day 
-              ? `${year}-${monthName}-${day.day}` 
+            const key = day.day
+              ? `${year}-${monthName}-${day.day}`
               : `empty-${year}-${monthName}-${index}`;
             return (
               <div
@@ -466,7 +612,7 @@ export default function HRDashboard() {
       <div className="space-y-6">
         <div className="flex justify-between items-center mb-4">
           <div className="flex items-center space-x-3">
-            <button 
+            <button
               onClick={backToOverview}
               className="p-2 rounded bg-gray-100 hover:bg-gray-200 transition duration-200"
               aria-label="Back to departments"
@@ -536,7 +682,7 @@ export default function HRDashboard() {
     return (
       <div className="space-y-4">
         <div className="flex items-center space-x-2">
-          <button 
+          <button
             onClick={backToDepartment}
             className="p-1 rounded bg-gray-100 hover:bg-gray-200"
           >
@@ -556,7 +702,7 @@ export default function HRDashboard() {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {departmentData.map((dept, index) => (
-          <div 
+          <div
             key={dept.id ?? `dept-${index}`}
             onClick={() => handleDepartmentClick(dept.id)}
             className="bg-white rounded-lg shadow-md p-6 border-t-4 border-blue-500 hover:shadow-lg transition duration-300 cursor-pointer"
@@ -639,9 +785,9 @@ export default function HRDashboard() {
       <header className="bg-blue-700 text-white py-5 px-8 shadow-md">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div className="flex items-center space-x-4">
-            <img 
-              src='/Images/bisag_logo.png' 
-              alt="BISAG-N Logo" 
+            <img
+              src='/Images/bisag_logo.png'
+              alt="BISAG-N Logo"
               className="h-16 w-auto"
             />
             <h1 className="text-2xl font-bold">BISAG-N HR Management System</h1>
