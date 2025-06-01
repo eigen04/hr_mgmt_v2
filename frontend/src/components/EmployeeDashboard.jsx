@@ -24,8 +24,8 @@ export default function EmployeeDashboard() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const navigate = useNavigate();
 
-    // Use current date dynamically (May 28, 2025)
-    const today = new Date().toISOString().split('T')[0]; // 2025-05-28
+    // Use current date dynamically (May 31, 2025)
+    const today = new Date().toISOString().split('T')[0]; // 2025-05-31
 
     useEffect(() => {
         const fetchUserData = async () => {
@@ -324,7 +324,7 @@ export default function EmployeeDashboard() {
 
             if (response.ok) {
                 const newApplication = await response.json();
-                setSuccessMessage('Leave application submitted successfully!');
+                setSuccessMessage(`Leave application submitted successfully! Awaiting approval from ${userData?.reportingTo?.fullName || 'your reporting manager'}.`);
                 setLeaveFormData({
                     leaveType: 'CL',
                     startDate: '',
@@ -466,7 +466,7 @@ export default function EmployeeDashboard() {
 
                     {userData && (
                         <p className="text-gray-600 mb-6">
-                            Welcome, {userData.fullName}!
+                            Welcome, {userData.fullName}! Your leaves will be sent to {userData.reportingTo?.fullName || 'your reporting manager'} for approval.
                         </p>
                     )}
 

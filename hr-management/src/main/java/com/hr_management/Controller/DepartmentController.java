@@ -1,15 +1,15 @@
 package com.hr_management.Controller;
 
-import com.hr_management.Entity.Department;
-import com.hr_management.Entity.User;
-import com.hr_management.Entity.LeaveApplication;
-import com.hr_management.Entity.LeaveApplicationDTO;
+import com.hr_management.Entity.*;
 import com.hr_management.service.DepartmentService;
+import com.hr_management.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
-
+import java.util.Optional;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -21,7 +21,6 @@ class EmployeeDTO {
     private String role;
     private List<LeaveApplicationDTO> leaveApplications;
 
-    // Getters and Setters
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
     public String getFullName() { return fullName; }
@@ -34,33 +33,39 @@ class EmployeeDTO {
 
 @RestController
 @RequestMapping("/api")
-@CrossOrigin(origins = "http://localhost:5173") // Add CORS for frontend
 public class DepartmentController {
 
     @Autowired
     private DepartmentService departmentService;
 
-    // Add a new department (Director only)
+    @Autowired
+    private UserService userService;
+
     @PostMapping("/departments")
     @PreAuthorize("hasRole('DIRECTOR')")
-    public ResponseEntity<Map<String, String>> addDepartment(@RequestBody Department department) {
+    public ResponseEntity<Map<String, Object>> addDepartment(@RequestBody Department department) {
         try {
-            departmentService.addDepartment(department);
-            Map<String, String> response = new HashMap<>();
-            response.put("message", "Department added successfully");
+            Department savedDepartment = departmentService.addDepartment(department);
+            Map<String, Object> response = new HashMap<>();
+            response.put("id", savedDepartment.getId());
+            response.put("name", savedDepartment.getName());
+            response.put("description", savedDepartment.getDescription());
+            response.put("employeeCount", savedDepartment.getEmployeeCount());
+            response.put("onLeaveCount", savedDepartment.getOnLeaveCount());
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
-            Map<String, String> errorResponse = new HashMap<>();
+            Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("message", e.getMessage());
+            errorResponse.put("status", "error");
             return ResponseEntity.status(400).body(errorResponse);
         } catch (Exception e) {
-            Map<String, String> errorResponse = new HashMap<>();
+            Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("message", "Failed to add department: " + e.getMessage());
+            errorResponse.put("status", "error");
             return ResponseEntity.status(500).body(errorResponse);
         }
     }
 
-    // Fetch department stats (total departments and active HODs) (Director only)
     @GetMapping("/departments/stats")
     @PreAuthorize("hasRole('DIRECTOR')")
     public ResponseEntity<Map<String, Integer>> getDepartmentStats() {
@@ -79,7 +84,6 @@ public class DepartmentController {
         }
     }
 
-    // Fetch all departments (HR only)
     @GetMapping("/hr/departments")
     @PreAuthorize("hasRole('HR')")
     public ResponseEntity<List<Department>> getAllDepartments() {
@@ -91,12 +95,33 @@ public class DepartmentController {
         }
     }
 
-    // Fetch employees in a department with their leave applications (HR only)
     @GetMapping("/hr/departments/{deptId}/employees")
-    @PreAuthorize("hasRole('HR')")
+    @PreAuthorize("hasAnyRole('HR', 'DIRECTOR', 'ASSISTANT_DIRECTOR', 'PROJECT_MANAGER')")
     public ResponseEntity<List<EmployeeDTO>> getEmployeesInDepartment(@PathVariable Long deptId) {
         try {
-            List<User> employees = departmentService.getEmployeesByDepartmentId(deptId);
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            String username = authentication.getName();
+            User currentUser = userService.getCurrentUser();
+            String userRole = currentUser.getRole();
+            // Use department ID for comparison
+            Long userDepartmentId = currentUser.getDepartmentEntity() != null 
+                ? currentUser.getDepartmentEntity().getId() 
+                : null;
+
+            Optional<Department> departmentOpt = departmentService.getDepartmentById(deptId);
+            if (departmentOpt.isEmpty()) {
+                return ResponseEntity.status(404).body(List.of());
+            }
+
+            // Restrict access for ASSISTANT_DIRECTOR and PROJECT_MANAGER to their own department
+            if (userRole.equals("ASSISTANT_DIRECTOR") || userRole.equals("PROJECT_MANAGER")) {
+                if (userDepartmentId == null || !userDepartmentId.equals(deptId)) {
+                    return ResponseEntity.status(403).body(List.of());
+                }
+            }
+
+            // Fetch employees, filtered by reportingTo for PROJECT_MANAGER
+            List<User> employees = departmentService.getEmployeesByDepartmentId(deptId, currentUser.getId(), userRole);
             List<EmployeeDTO> employeeDTOs = employees.stream().map(employee -> {
                 EmployeeDTO dto = new EmployeeDTO();
                 dto.setId(employee.getId());
@@ -107,7 +132,6 @@ public class DepartmentController {
                     LeaveApplicationDTO leaveDTO = new LeaveApplicationDTO();
                     leaveDTO.setId(leave.getId());
                     leaveDTO.setUserName(leave.getUser().getUsername());
-                    // Normalize leaveType
                     String leaveType = leave.getLeaveType();
                     if ("CL".equalsIgnoreCase(leaveType)) {
                         leaveType = "CASUAL";
@@ -118,8 +142,8 @@ public class DepartmentController {
                     } else if ("ML".equalsIgnoreCase(leaveType)) {
                         leaveType = "MATERNITY";
                     } else if ("HALF-DAY".equalsIgnoreCase(leaveType)) {
-                        leaveType = "CASUAL"; // Assume HALF-DAY is a casual leave
-                        leaveDTO.setHalfDay(true); // Ensure isHalfDay is set
+                        leaveType = "CASUAL";
+                        leaveDTO.setHalfDay(true);
                     }
                     leaveDTO.setLeaveType(leaveType.toUpperCase());
                     leaveDTO.setStartDate(leave.getStartDate());

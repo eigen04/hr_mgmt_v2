@@ -7,6 +7,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.Ordered;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -20,7 +21,7 @@ import java.io.IOException;
 import java.util.Collections;
 
 @Component
-public class JwtAuthenticationFilter extends OncePerRequestFilter {
+public class JwtAuthenticationFilter extends OncePerRequestFilter implements Ordered {
 
     private static final Logger logger = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
 
@@ -37,11 +38,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
 
         String requestPath = request.getRequestURI();
+        String method = request.getMethod();
 
-        // Allow unauthenticated access to specific endpoints
-        if (requestPath.equals("/api/departments") || 
-            requestPath.startsWith("/api/auth") || 
-            requestPath.equals("/api/roles")) { // Added /api/roles
+        // Allow public endpoints and OPTIONS requests
+        if ("OPTIONS".equals(method) ||
+            requestPath.startsWith("/api/auth") ||
+            (method.equals("GET") && (requestPath.equals("/api/departments") || requestPath.equals("/api/roles")))) {
+            logger.debug("Bypassing JWT authentication for request: {} {}", method, requestPath);
             chain.doFilter(request, response);
             return;
         }
@@ -49,6 +52,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String header = request.getHeader("Authorization");
 
         if (header == null || !header.startsWith("Bearer ")) {
+            logger.warn("Missing or invalid Authorization header for request: {} {}", method, requestPath);
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             response.setContentType("application/json");
             response.getWriter().write("{\"message\": \"Missing or invalid Authorization header\"}");
@@ -59,9 +63,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         try {
             String username = jwtUtil.extractUsername(token);
-            String role = jwtUtil.extractRole(token); // Already includes ROLE_ prefix
+            String role = jwtUtil.extractRole(token);
+            logger.debug("Extracted username: {}, role: {} from token for request: {}", username, role, requestPath);
 
             if (username == null || role == null) {
+                logger.warn("Invalid token: username or role not found for request: {} {}", method, requestPath);
                 response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                 response.setContentType("application/json");
                 response.getWriter().write("{\"message\": \"Invalid token: username or role not found\"}");
@@ -81,7 +87,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
                     authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                     SecurityContextHolder.getContext().setAuthentication(authToken);
+                    logger.debug("Authentication successful for user: {}, role: {}", username, role);
                 } else {
+                    logger.warn("Invalid or expired token for request: {} {}", method, requestPath);
                     response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                     response.setContentType("application/json");
                     response.getWriter().write("{\"message\": \"Invalid or expired token\"}");
@@ -90,7 +98,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             }
 
         } catch (Exception e) {
-            logger.error("JWT validation failed: {}", e.getMessage());
+            logger.error("JWT validation failed for request: {} {}, error: {}", method, requestPath, e.getMessage());
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             response.setContentType("application/json");
             response.getWriter().write("{\"message\": \"JWT validation failed: " + e.getMessage() + "\"}");
@@ -98,5 +106,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         chain.doFilter(request, response);
+    }
+
+    @Override
+    public int getOrder() {
+        return 0; // Run after CorsFilter
     }
 }

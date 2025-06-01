@@ -32,13 +32,13 @@ public class DashboardService {
                 .count();
         metrics.setOnLeaveToday(onLeaveToday);
 
-        // Approved Leaves (all time)
-        long approvedLeaves = leaveApplicationRepository.countByStatusAndUserRole("APPROVED", "EMPLOYEE");
-        metrics.setApprovedLeaves(approvedLeaves);
+        // Total Assistant Directors
+        long assistantDirectors = userRepository.countByRole("ASSISTANT_DIRECTOR");
+        metrics.setAssistantDirectors(assistantDirectors);
 
-        // Pending Leaves
-        long pendingLeaves = leaveApplicationRepository.countByStatusAndUserRole("PENDING", "EMPLOYEE");
-        metrics.setPendingLeaves(pendingLeaves);
+        // Total Project Managers
+        long projectManagers = userRepository.countByRole("PROJECT_MANAGER");
+        metrics.setProjectManagers(projectManagers);
 
         return metrics;
     }  

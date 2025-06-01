@@ -31,11 +31,16 @@ public interface LeaveApplicationRepository extends JpaRepository<LeaveApplicati
     List<LeaveApplication> findApprovedLeavesOnDate(@Param("date") LocalDate date);
 
     List<LeaveApplication> findByUserIdAndStatus(Long userId, String status);
+    List<LeaveApplication> findByUserIdInAndStatus(List<Long> userIds, String status);
 
     List<LeaveApplication> findByUserAndStatus(User user, String status);
 
     @Query("SELECT la FROM LeaveApplication la WHERE la.approverId = :approverId AND la.status = :status")
     List<LeaveApplication> findByApproverIdAndStatus(@Param("approverId") Long approverId, @Param("status") String status);
+
+    // Added method for counting leaves by approverId and status
+    @Query("SELECT COUNT(la) FROM LeaveApplication la WHERE la.approverId = :approverId AND la.status = :status")
+    long countByApproverIdAndStatus(@Param("approverId") Long approverId, @Param("status") String status);
 
     List<LeaveApplication> findByUserAndStartDate(@Param("user") User user, @Param("startDate") LocalDate startDate);
 

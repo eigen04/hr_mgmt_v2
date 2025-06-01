@@ -67,8 +67,11 @@ export default function Login() {
                         case 'HR':
                             navigate('/hr-dashboard', { replace: true });
                             break;
-                        case 'HOD':
+                        case 'PROJECT_MANAGER':
                             navigate('/hod-dashboard', { replace: true });
+                            break;
+                        case 'ASSISTANT_DIRECTOR':
+                            navigate('/assistantdirector-dashboard', { replace: true });
                             break;
                         case 'DIRECTOR':
                             navigate('/director-dashboard', { replace: true });

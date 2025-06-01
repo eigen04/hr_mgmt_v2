@@ -3,6 +3,7 @@ package com.hr_management.service;
 import com.hr_management.Entity.Department;
 import com.hr_management.Entity.LeaveApplication;
 import com.hr_management.Entity.User;
+import com.hr_management.Entity.DepartmentMetrics;
 import com.hr_management.Repository.DepartmentRepository;
 import com.hr_management.Repository.LeaveApplicationRepository;
 import com.hr_management.Repository.UserRepository;
@@ -14,6 +15,8 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class DepartmentService {
@@ -29,15 +32,26 @@ public class DepartmentService {
     @Autowired
     private LeaveApplicationRepository leaveApplicationRepository;
 
+    // Helper method to check if a date is a working day
+    private boolean isWorkingDay(LocalDate date) {
+        int dayOfWeek = date.getDayOfWeek().getValue(); // 1 (Monday) to 7 (Sunday)
+        if (dayOfWeek == 7) return false; // Sunday
+
+        int dateOfMonth = date.getDayOfMonth();
+        int weekOfMonth = (dateOfMonth - 1) / 7 + 1;
+        if (dayOfWeek == 6) { // Saturday
+            return !(weekOfMonth == 2 || weekOfMonth == 4); // Exclude second and fourth Saturdays
+        }
+        return true;
+    }
+
     // Add a new department
     public Department addDepartment(Department department) {
-        // Validate department name
         if (department.getName() == null || department.getName().trim().isEmpty()) {
             logger.error("Attempted to add a department with null or empty name.");
             throw new IllegalArgumentException("Department name cannot be empty");
         }
 
-        // Check for duplicate department name
         Optional<Department> existingDepartment = departmentRepository.findByName(department.getName());
         if (existingDepartment.isPresent()) {
             logger.warn("Department with name '{}' already exists.", department.getName());
@@ -67,16 +81,39 @@ public class DepartmentService {
     // Fetch all departments with employeeCount and onLeaveCount
     public List<Department> getAllDepartments() {
         List<Department> departments = departmentRepository.findAll();
-        LocalDate today = LocalDate.now(); // Current date (e.g., May 14, 2025)
+        LocalDate today = LocalDate.now();
 
         for (Department dept : departments) {
-            // Calculate employee count
-            long employeeCount = userRepository.countByDepartment(dept.getName());
-            dept.setEmployeeCount((int) employeeCount);
+            // Fetch users in the department
+            List<User> deptUsers = userRepository.findByDepartment(dept.getName());
+            dept.setEmployeeCount(deptUsers.size());
+
+            // Fetch leave applications for users in this department
+            List<Long> userIds = deptUsers.stream().map(User::getId).collect(Collectors.toList());
+            List<LeaveApplication> leaveApplications = userIds.isEmpty() ? List.of() :
+                    leaveApplicationRepository.findByUserIdInAndStatus(userIds, "APPROVED");
 
             // Calculate onLeaveCount (approved leaves active today)
-            List<LeaveApplication> onLeaveApplications = leaveApplicationRepository.findCurrentlyOnLeaveByDepartment(dept.getName());
-            dept.setOnLeaveCount(onLeaveApplications.size());
+            Set<Long> onLeaveUserIds = leaveApplications.stream()
+                    .filter(la -> {
+                        LocalDate startDate = la.getStartDate();
+                        LocalDate endDate = la.getEndDate() != null ? la.getEndDate() : startDate;
+                        boolean overlapsToday = (startDate.isEqual(today) || startDate.isBefore(today)) &&
+                                               (endDate.isEqual(today) || endDate.isAfter(today));
+                        if (!overlapsToday) return false;
+
+                        // Apply working day logic for CASUAL, LWP, HALF_DAY_CL, HALF_DAY_LWP
+                        String leaveType = la.getLeaveType();
+                        if (List.of("CASUAL", "LWP", "HALF_DAY_CL", "HALF_DAY_LWP").contains(leaveType)) {
+                            return isWorkingDay(today);
+                        }
+                        return true;
+                    })
+                    .map(la -> la.getUser().getId())
+                    .collect(Collectors.toSet());
+            dept.setOnLeaveCount(onLeaveUserIds.size());
+
+            logger.debug("Department '{}': employeeCount={}, onLeaveCount={}", dept.getName(), dept.getEmployeeCount(), dept.getOnLeaveCount());
         }
 
         return departments;
@@ -87,22 +124,100 @@ public class DepartmentService {
         return departmentRepository.findByName(name);
     }
 
-    // Fetch employees by department ID
-    public List<User> getEmployeesByDepartmentId(Long deptId) {
+    // Get Department by ID
+    public Optional<Department> getDepartmentById(Long id) {
+        return departmentRepository.findById(id);
+    }
+
+    // Fetch employees by department ID, filtered by reportingTo for PROJECT_MANAGER
+    public List<User> getEmployeesByDepartmentId(Long deptId, Long currentUserId, String userRole) {
         Optional<Department> departmentOpt = departmentRepository.findById(deptId);
-        if (departmentOpt.isPresent()) {
-            String departmentName = departmentOpt.get().getName();
-            return userRepository.findByDepartment(departmentName);
+        if (departmentOpt.isEmpty()) {
+            logger.warn("Department not found with id: {}", deptId);
+            return List.of();
         }
-        return List.of(); // Return empty list if department not found
+        String departmentName = departmentOpt.get().getName();
+
+        List<User> employees;
+        if ("PROJECT_MANAGER".equals(userRole)) {
+            // For project managers, fetch only employees reporting to them
+            employees = userRepository.findByDepartmentAndReportingToId(departmentName, currentUserId);
+            logger.debug("Fetched {} employees reporting to PROJECT_MANAGER (ID: {}) in department '{}'", employees.size(), currentUserId, departmentName);
+        } else {
+            // For other roles (DIRECTOR, ASSISTANT_DIRECTOR, HR), fetch all employees in the department
+            employees = userRepository.findByDepartment(departmentName);
+            logger.debug("Fetched {} employees in department '{}'", employees.size(), departmentName);
+        }
+        return employees;
     }
 
     // Fetch leave applications by user ID
     public List<LeaveApplication> getLeaveApplicationsByUserId(Long userId) {
-        Optional<User> userOpt = userRepository.findById(userId);
-        if (userOpt.isPresent()) {
-            return leaveApplicationRepository.findByUserAndStatus(userOpt.get(), "APPROVED");
+        return leaveApplicationRepository.findByUserIdAndStatus(userId, "APPROVED");
+    }
+
+    // Fetch department-specific metrics
+    public DepartmentMetrics getDepartmentMetrics(Long departmentId) {
+        Optional<Department> departmentOpt = departmentRepository.findById(departmentId);
+        if (departmentOpt.isEmpty()) {
+            logger.warn("Department not found with id: {}", departmentId);
+            throw new IllegalArgumentException("Department not found with id: " + departmentId);
         }
-        return List.of();
+        String departmentName = departmentOpt.get().getName();
+        logger.debug("Fetching metrics for department: {}", departmentName);
+
+        DepartmentMetrics metrics = new DepartmentMetrics();
+        LocalDate today = LocalDate.now();
+
+        // Fetch users in the department
+        List<User> deptUsers = userRepository.findByDepartment(departmentName);
+
+        // Total Employees (excluding ASSISTANT_DIRECTOR)
+        long totalEmployees = deptUsers.stream()
+                .filter(user -> user.getRole().equals("EMPLOYEE"))
+                .count();
+        metrics.setTotalEmployees(totalEmployees);
+
+        // Fetch leave applications for users in this department
+        List<Long> userIds = deptUsers.stream().map(User::getId).collect(Collectors.toList());
+        List<LeaveApplication> leaveApplications = userIds.isEmpty() ? List.of() :
+                leaveApplicationRepository.findByUserIdInAndStatus(userIds, "APPROVED");
+
+        // On Leave Today (approved leaves that overlap with today)
+        Set<Long> onLeaveUserIds = leaveApplications.stream()
+                .filter(la -> {
+                    LocalDate startDate = la.getStartDate();
+                    LocalDate endDate = la.getEndDate() != null ? la.getEndDate() : startDate;
+                    boolean overlapsToday = (startDate.isEqual(today) || startDate.isBefore(today)) &&
+                                           (endDate.isEqual(today) || endDate.isAfter(today));
+                    if (!overlapsToday) return false;
+
+                    // Apply working day logic for CASUAL, LWP, HALF_DAY_CL, HALF_DAY_LWP
+                    String leaveType = la.getLeaveType();
+                    if (List.of("CASUAL", "LWP", "HALF_DAY_CL", "HALF_DAY_LWP").contains(leaveType)) {
+                        return isWorkingDay(today);
+                    }
+                    return true;
+                })
+                .map(la -> la.getUser().getId())
+                .collect(Collectors.toSet());
+        metrics.setOnLeaveToday(onLeaveUserIds.size());
+
+        // Total Assistant Directors in the department
+        long assistantDirectors = deptUsers.stream()
+                .filter(user -> user.getRole().equals("ASSISTANT_DIRECTOR"))
+                .count();
+        metrics.setAssistantDirectors(assistantDirectors);
+
+        // Total Project Managers in the department
+        long projectManagers = deptUsers.stream()
+                .filter(user -> user.getRole().equals("PROJECT_MANAGER"))
+                .count();
+        metrics.setProjectManagers(projectManagers);
+
+        logger.info("Metrics for department '{}': totalEmployees={}, onLeaveToday={}, assistantDirectors={}, projectManagers={}",
+                departmentName, totalEmployees, onLeaveUserIds.size(), assistantDirectors, projectManagers);
+
+        return metrics;
     }
 }

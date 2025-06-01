@@ -7,10 +7,12 @@ import ResetPasswordPage from '../pages/ResetPasswordPage';
 import EmployeeDashboardPage from '../pages/EmployeeDashboardPage';
 import HODDashboardPage from '../pages/HODDashboardPage';
 import DirectorDashboardPage from '../pages/DirectorDashboardPage';
+import AssistantDirectorDashPage from '../pages/AssistantDirectorDashPage';
 
 const AppRoutes = () => {
   return (
     <Routes>
+      <Route path="/assistantdirector-dashboard" element={<AssistantDirectorDashPage/>}/>
       <Route path="/director-dashboard" element={<DirectorDashboardPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/employee-dashboard" element={<EmployeeDashboardPage />} />

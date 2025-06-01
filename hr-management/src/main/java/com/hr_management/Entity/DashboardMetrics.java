@@ -3,8 +3,8 @@ package com.hr_management.Entity;
 public class DashboardMetrics {
     private long totalEmployees;
     private long onLeaveToday;
-    private long approvedLeaves;
-    private long pendingLeaves;
+    private long assistantDirectors;
+    private long projectManagers;
 
     public long getTotalEmployees() { return totalEmployees; }
     public void setTotalEmployees(long totalEmployees) { this.totalEmployees = totalEmployees; }
@@ -12,9 +12,9 @@ public class DashboardMetrics {
     public long getOnLeaveToday() { return onLeaveToday; }
     public void setOnLeaveToday(long onLeaveToday) { this.onLeaveToday = onLeaveToday; }
 
-    public long getApprovedLeaves() { return approvedLeaves; }
-    public void setApprovedLeaves(long approvedLeaves) { this.approvedLeaves = approvedLeaves; }
+    public long getAssistantDirectors() { return assistantDirectors; }
+    public void setAssistantDirectors(long assistantDirectors) { this.assistantDirectors = assistantDirectors; }
 
-    public long getPendingLeaves() { return pendingLeaves; }
-    public void setPendingLeaves(long pendingLeaves) { this.pendingLeaves = pendingLeaves; }
+    public long getProjectManagers() { return projectManagers; }
+    public void setProjectManagers(long projectManagers) { this.projectManagers = projectManagers; }
 }

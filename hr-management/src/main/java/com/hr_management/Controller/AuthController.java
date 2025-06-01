@@ -6,22 +6,23 @@ import com.hr_management.Util.JwtUtil;
 import com.hr_management.service.EmailService;
 import com.hr_management.Entity.PasswordResetToken;
 import com.hr_management.Repository.PasswordResetTokenRepository;
-
+import com.hr_management.service.UserService;
+import com.hr_management.dto.ReportingPersonDTO;
+import com.hr_management.dto.UserDTO;
+import java.util.*;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
-import java.util.Optional;
+import java.util.List;
 import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/auth")
-@CrossOrigin(origins = "${frontend.url:http://localhost:5173}")
 public class AuthController {
 
     @Autowired
@@ -34,50 +35,44 @@ public class AuthController {
     private EmailService emailService;
 
     @Autowired
-    private BCryptPasswordEncoder passwordEncoder;
+    private UserService userService;
 
-    @Autowired
-    private JwtUtil jwtUtil;
-
-    // -------------------- SIGNUP --------------------
-    @PostMapping("/signup")
-    public ResponseEntity<?> signup(@Valid @RequestBody UserDTO userDTO) {
-        if (userRepository.existsByUsername(userDTO.getUsername())) {
-            return ResponseEntity.badRequest().body(new ErrorResponse("Username already taken"));
+    @GetMapping("/reporting-persons")
+    public ResponseEntity<?> getReportingPersons(@RequestParam String role, @RequestParam(required = false) String department) {
+        try {
+            List<ReportingPersonDTO> reportingPersons = userService.getPotentialReportingPersons(role, department);
+            return ResponseEntity.ok(reportingPersons);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(new ErrorResponse("Failed to fetch reporting persons: " + e.getMessage()));
         }
-        if (userRepository.existsByEmail(userDTO.getEmail())) {
-            return ResponseEntity.badRequest().body(new ErrorResponse("Email already registered"));
-        }
-
-        User user = new User();
-        user.setFullName(userDTO.getFullName());
-        user.setUsername(userDTO.getUsername());
-        user.setPassword(passwordEncoder.encode(userDTO.getPassword()));
-        user.setEmail(userDTO.getEmail());
-        user.setDepartment(userDTO.getDepartment());
-        user.setRole(userDTO.getRole());
-        user.setGender(userDTO.getGender());
-
-        userRepository.save(user);
-        return ResponseEntity.ok(new SuccessResponse("User registered successfully"));
     }
 
-    // -------------------- LOGIN --------------------
+    @PostMapping("/signup")
+    public ResponseEntity<?> signup(@Valid @RequestBody UserDTO userDTO) {
+        try {
+            userService.signup(userDTO);
+            return ResponseEntity.ok(new SuccessResponse("User registered successfully"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(500).body(new ErrorResponse("An error occurred: " + e.getMessage()));
+        }
+    }
+
     @PostMapping("/login")
     public ResponseEntity<?> login(@Valid @RequestBody LoginRequest request) {
         User user = userRepository.findByUsername(request.getUsername())
                 .orElse(null);
-        if (user == null || !passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+        if (user == null || !userService.loadUserByUsername(request.getUsername()).getPassword().equals(user.getPassword())) {
             return ResponseEntity.badRequest().body(new ErrorResponse("Invalid username or password"));
         }
 
-        // Normalize role to uppercase
         String role = user.getRole().toUpperCase();
-        String token = jwtUtil.generateToken(user.getUsername(), role, user.getDepartment()); // ✅ Pass 3 arguments
+        String token = userService.generateToken(user);
         return ResponseEntity.ok(new LoginResponse(token, role));
     }
 
-    // -------------------- FORGOT PASSWORD --------------------
     @PostMapping("/forgot-password")
     public ResponseEntity<?> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
         Optional<User> optionalUser = userRepository.findByEmail(request.getEmail());
@@ -97,8 +92,6 @@ public class AuthController {
         return ResponseEntity.ok(new SuccessResponse("Password reset email sent successfully"));
     }
 
-
-    // -------------------- RESET PASSWORD --------------------
     @PostMapping("/reset-password")
     public ResponseEntity<?> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
         PasswordResetToken resetToken = tokenRepository.findByToken(request.getToken());
@@ -116,122 +109,89 @@ public class AuthController {
         }
 
         User user = resetToken.getUser();
-        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        user.setPassword(userService.loadUserByUsername(user.getUsername()).getPassword());
         userRepository.save(user);
 
         tokenRepository.delete(resetToken);
         return ResponseEntity.ok(new SuccessResponse("Password reset successfully"));
     }
-}
 
-// -------------------- DTO CLASSES --------------------
+    static class LoginRequest {
+        @NotBlank
+        private String username;
+        @NotBlank
+        private String password;
 
-class UserDTO {
-    @NotBlank
-    private String fullName;
-    @NotBlank
-    private String username;
-    @NotBlank
-    private String password;
-    @NotBlank
-    @Email
-    private String email;
-    @NotBlank
-    private String department;
-    @NotBlank
-    private String role;
-    @NotBlank
-    private String gender; // <-- Add this field
+        public LoginRequest() {}
 
-    // Getters and setters
-    public String getFullName() { return fullName; }
-    public void setFullName(String fullName) { this.fullName = fullName; }
-
-    public String getUsername() { return username; }
-    public void setUsername(String username) { this.username = username; }
-
-    public String getPassword() { return password; }
-    public void setPassword(String password) { this.password = password; }
-
-    public String getEmail() { return email; }
-    public void setEmail(String email) { this.email = email; }
-
-    public String getDepartment() { return department; }
-    public void setDepartment(String department) { this.department = department; }
-
-    public String getRole() { return role; }
-    public void setRole(String role) { this.role = role; }
-
-    public String getGender() { return gender; } // <-- Add this
-    public void setGender(String gender) { this.gender = gender; } // <-- And this
-}
-
-
-class LoginRequest {
-    @NotBlank
-    private String username;
-    @NotBlank
-    private String password;
-
-    public String getUsername() { return username; }
-    public void setUsername(String username) { this.username = username; }
-    public String getPassword() { return password; }
-    public void setPassword(String password) { this.password = password; }
-}
-
-class LoginResponse {
-    private String token;
-    private String role;
-
-    public LoginResponse(String token, String role) {
-        this.token = token;
-        this.role = role;
+        public String getUsername() { return username; }
+        public void setUsername(String username) { this.username = username; }
+        public String getPassword() { return password; }
+        public void setPassword(String password) { this.password = password; }
     }
 
-    public String getToken() { return token; }
-    public void setToken(String token) { this.token = token; }
-    public String getRole() { return role; }
-    public void setRole(String role) { this.role = role; }
-}
+    static class LoginResponse {
+        private String token;
+        private String role;
 
-class ForgotPasswordRequest {
-    @NotBlank
-    @Email
-    private String email;
+        public LoginResponse() {}
+        public LoginResponse(String token, String role) {
+            this.token = token;
+            this.role = role;
+        }
 
-    public String getEmail() { return email; }
-    public void setEmail(String email) { this.email = email; }
-}
+        public String getToken() { return token; }
+        public void setToken(String token) { this.token = token; }
+        public String getRole() { return role; }
+        public void setRole(String role) { this.role = role; }
+    }
 
-class ResetPasswordRequest {
-    @NotBlank
-    private String token;
-    @NotBlank
-    private String password;
-    @NotBlank
-    private String confirmPassword;
+    static class ForgotPasswordRequest {
+        @NotBlank
+        @Email
+        private String email;
 
-    public String getToken() { return token; }
-    public void setToken(String token) { this.token = token; }
-    public String getPassword() { return password; }
-    public void setPassword(String password) { this.password = password; }
-    public String getConfirmPassword() { return confirmPassword; }
-    public void setConfirmPassword(String confirmPassword) { this.confirmPassword = confirmPassword; }
-}
+        public ForgotPasswordRequest() {}
 
-// -------------------- RESPONSE CLASSES --------------------
+        public String getEmail() { return email; }
+        public void setEmail(String email) { this.email = email; }
+    }
 
-class ErrorResponse {
-    private String message;
-    public ErrorResponse(String message) { this.message = message; }
-    public String getMessage() { return message; }
-    public void setMessage(String message) { this.message = message; }
-}
+    static class ResetPasswordRequest {
+        @NotBlank
+        private String token;
+        @NotBlank
+        private String password;
+        @NotBlank
+        private String confirmPassword;
 
-class SuccessResponse {
-    private String message;
+        public ResetPasswordRequest() {}
 
-    public SuccessResponse(String message) { this.message = message; }
-    public String getMessage() { return message; }
-    public void setMessage(String message) { this.message = message; }
+        public String getToken() { return token; }
+        public void setToken(String token) { this.token = token; }
+        public String getPassword() { return password; }
+        public void setPassword(String password) { this.password = password; }
+        public String getConfirmPassword() { return confirmPassword; }
+        public void setConfirmPassword(String confirmPassword) { this.confirmPassword = confirmPassword; }
+    }
+
+    static class ErrorResponse {
+        private String message;
+
+        public ErrorResponse() {}
+        public ErrorResponse(String message) { this.message = message; }
+
+        public String getMessage() { return message; }
+        public void setMessage(String message) { this.message = message; }
+    }
+
+    static class SuccessResponse {
+        private String message;
+
+        public SuccessResponse() {}
+        public SuccessResponse(String message) { this.message = message; }
+
+        public String getMessage() { return message; }
+        public void setMessage(String message) { this.message = message; }
+    }
 }

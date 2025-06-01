@@ -39,6 +39,19 @@ public class LeaveService {
     public LeaveApplication applyLeave(LeaveApplication application) {
         logger.info("Applying leave for user: {}, type: {}", userService.getCurrentUser().getId(), application.getLeaveType());
         User user = userService.getCurrentUser();
+
+        // Prevent Assistant Directors from applying leaves
+        if (user.getRole().equals("ASSISTANT_DIRECTOR")) {
+            logger.warn("Assistant Director {} attempted to apply for leave", user.getId());
+            throw new RuntimeException("Assistant Directors are not required to apply for leaves.");
+        }
+
+        // Prevent Admins (Director) from applying leaves
+        if (user.getRole().equals("ADMIN")) {
+            logger.warn("Admin {} attempted to apply for leave", user.getId());
+            throw new RuntimeException("As the Director, you cannot apply for leaves.");
+        }
+
         application.setUser(user);
         application.setStatus("PENDING");
         application.setAppliedOn(LocalDate.now());
@@ -65,22 +78,13 @@ public class LeaveService {
             application.setEndDate(application.getStartDate().plusDays(14)); // 15 days total
         }
 
-        // Set approver
-        if (user.getRole().equals("HOD")) {
-            User director = userService.findDirector();
-            if (director == null) {
-                logger.error("No Director found to approve HOD leave for user: {}", user.getId());
-                throw new RuntimeException("No Director available to approve this leave. Please contact HR.");
-            }
-            application.setApproverId(director.getId());
-        } else {
-            User hod = userService.findHodByDepartment(user.getDepartment());
-            if (hod == null) {
-                logger.error("No HOD found in department {} to approve leave for user: {}", user.getDepartment(), user.getId());
-                throw new RuntimeException("No HOD available in your department to approve this leave. Please contact HR.");
-            }
-            application.setApproverId(hod.getId());
+        // Set approver using the reportingTo field
+        User approver = user.getReportingTo();
+        if (approver == null) {
+            logger.error("No reporting person found for user: {}. Role: {}", user.getId(), user.getRole());
+            throw new RuntimeException("No reporting person available to approve this leave. Please contact HR.");
         }
+        application.setApproverId(approver.getId());
 
         // Initialize leave balance if null
         LeaveBalance leaveBalance = user.getLeaveBalance();
@@ -184,16 +188,57 @@ public class LeaveService {
         return savedApplication;
     }
 
-    public List<LeaveApplicationDTO> getPendingHodLeavesForDirector() {
-        List<LeaveApplication> pendingHodLeaves = leaveApplicationRepository.findByStatusAndUserRole("PENDING", "HOD");
-        return pendingHodLeaves.stream().map(this::convertToDTO).collect(Collectors.toList());
+    public List<LeaveApplicationDTO> getPendingLeavesForCurrentUser() {
+        User currentUser = userService.getCurrentUser();
+        String userRole = currentUser.getRole();
+        List<LeaveApplication> pendingLeaves;
+
+        if (userRole.equals("ASSISTANT_DIRECTOR")) {
+            // Assistant Directors should only see leaves from their own department
+            String userDepartment = currentUser.getDepartment();
+            pendingLeaves = leaveApplicationRepository.findByApproverIdAndStatus(currentUser.getId(), "PENDING")
+                    .stream()
+                    .filter(leave -> leave.getUser().getDepartment().equals(userDepartment))
+                    .collect(Collectors.toList());
+        } else {
+            // PROJECT_MANAGER and DIRECTOR can see all leaves assigned to them
+            pendingLeaves = leaveApplicationRepository.findByApproverIdAndStatus(currentUser.getId(), "PENDING");
+        }
+
+        return pendingLeaves.stream().map(this::convertToDTO).collect(Collectors.toList());
     }
 
-    public Map<String, Integer> getHodLeaveStats() {
+    public Map<String, Integer> getLeaveStatsForCurrentUser() {
+        User currentUser = userService.getCurrentUser();
+        String userRole = currentUser.getRole();
         Map<String, Integer> stats = new HashMap<>();
-        stats.put("pending", (int) leaveApplicationRepository.countByStatusAndUserRole("PENDING", "HOD"));
-        stats.put("approved", (int) leaveApplicationRepository.countByStatusAndUserRole("APPROVED", "HOD"));
-        stats.put("rejected", (int) leaveApplicationRepository.countByStatusAndUserRole("REJECTED", "HOD"));
+
+        if (userRole.equals("ASSISTANT_DIRECTOR")) {
+            // Assistant Directors should only count leaves from their own department
+            String userDepartment = currentUser.getDepartment();
+            long pending = leaveApplicationRepository.findByApproverIdAndStatus(currentUser.getId(), "PENDING")
+                    .stream()
+                    .filter(leave -> leave.getUser().getDepartment().equals(userDepartment))
+                    .count();
+            long approved = leaveApplicationRepository.findByApproverIdAndStatus(currentUser.getId(), "APPROVED")
+                    .stream()
+                    .filter(leave -> leave.getUser().getDepartment().equals(userDepartment))
+                    .count();
+            long rejected = leaveApplicationRepository.findByApproverIdAndStatus(currentUser.getId(), "REJECTED")
+                    .stream()
+                    .filter(leave -> leave.getUser().getDepartment().equals(userDepartment))
+                    .count();
+
+            stats.put("pending", (int) pending);
+            stats.put("approved", (int) approved);
+            stats.put("rejected", (int) rejected);
+        } else {
+            // PROJECT_MANAGER and DIRECTOR can see stats for all leaves assigned to them
+            stats.put("pending", (int) leaveApplicationRepository.countByApproverIdAndStatus(currentUser.getId(), "PENDING"));
+            stats.put("approved", (int) leaveApplicationRepository.countByApproverIdAndStatus(currentUser.getId(), "APPROVED"));
+            stats.put("rejected", (int) leaveApplicationRepository.countByApproverIdAndStatus(currentUser.getId(), "REJECTED"));
+        }
+
         return stats;
     }
 
@@ -204,6 +249,12 @@ public class LeaveService {
 
     public Map<String, Object> getLeaveBalance() {
         User user = userService.getCurrentUser();
+
+        // Assistant Directors and Admins do not have leave balances
+        if (user.getRole().equals("ASSISTANT_DIRECTOR") || user.getRole().equals("ADMIN")) {
+            return new HashMap<>();
+        }
+
         LeaveBalance leaveBalance = user.getLeaveBalance();
         Map<String, Object> result = new HashMap<>();
 
@@ -252,7 +303,7 @@ public class LeaveService {
                 user, List.of("LWP", "HALF_DAY_LWP"), startOfYear, endOfYear);
 
         double totalLwpUsed = lwpApplications.stream()
-                .filter(app -> app.getStatus().equals("APPROVED")) // Only count approved leaves
+                .filter(app -> app.getStatus().equals("APPROVED"))
                 .mapToDouble(app -> calculateRequiredDays(app.getLeaveType(), app.getStartDate(), app.getEndDate(), app.isHalfDay()))
                 .sum();
         double remainingLwp = LWP_ANNUAL_LIMIT - totalLwpUsed;
@@ -324,6 +375,11 @@ public class LeaveService {
     }
 
     private Map<String, Double> calculateLeaveBalance(User user) {
+        // Assistant Directors and Admins do not have leave balances
+        if (user.getRole().equals("ASSISTANT_DIRECTOR") || user.getRole().equals("ADMIN")) {
+            return new HashMap<>();
+        }
+
         LeaveBalance leaveBalance = user.getLeaveBalance();
         Map<String, Double> balance = new HashMap<>();
 
@@ -372,7 +428,7 @@ public class LeaveService {
                 user, List.of("LWP", "HALF_DAY_LWP"), startOfYear, endOfYear);
 
         double totalLwpUsed = lwpApplications.stream()
-                .filter(app -> app.getStatus().equals("APPROVED")) // Only count approved leaves
+                .filter(app -> app.getStatus().equals("APPROVED"))
                 .mapToDouble(app -> calculateRequiredDays(app.getLeaveType(), app.getStartDate(), app.getEndDate(), app.isHalfDay()))
                 .sum();
 
@@ -454,8 +510,14 @@ public class LeaveService {
         leave.setStatus("APPROVED");
         leaveApplicationRepository.save(leave);
 
-        // Recalculate balance after approval
+        // Skip balance updates for Assistant Directors
         User user = leave.getUser();
+        if (user.getRole().equals("ASSISTANT_DIRECTOR")) {
+            logger.info("Leave approved for Assistant Director {}. No balance updates needed.", user.getId());
+            return;
+        }
+
+        // Recalculate balance after approval
         LeaveBalance leaveBalance = user.getLeaveBalance();
         if (leaveBalance == null) {
             leaveBalance = new LeaveBalance();

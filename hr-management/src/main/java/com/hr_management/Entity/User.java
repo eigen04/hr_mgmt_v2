@@ -1,6 +1,9 @@
 package com.hr_management.Entity;
 
+import com.fasterxml.jackson.annotation.JsonBackReference;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
+import java.util.List;
 
 @Entity
 @Table(name = "users")
@@ -22,8 +25,12 @@ public class User {
     @Column(nullable = false, unique = true)
     private String email;
 
-    @Column(nullable = false)
-    private String department;
+    @Column
+    private String department; // This will store the department name temporarily
+
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "department_id") // Maps to the department_id column in the users table
+    private Department departmentEntity; // Reference to the Department entity
 
     @Column(nullable = false)
     private String role;
@@ -32,16 +39,25 @@ public class User {
     private String gender;
 
     @Embedded
-    private LeaveBalance leaveBalance = new LeaveBalance(); // initialize with default values
+    private LeaveBalance leaveBalance = new LeaveBalance(); // Initialize with default values
 
     @Column(nullable = false)
-    private String status = "ACTIVE"; // Add this field
+    private String status = "ACTIVE";
 
     @Column(name = "leave_without_payment", nullable = false)
-    private Double leaveWithoutPayment = 0.0; // Maps to the new column
+    private Double leaveWithoutPayment = 0.0;
 
     @Column(name = "half_day_lwp", nullable = false)
-    private Double halfDayLwp = 0.0; // Maps to the new column
+    private Double halfDayLwp = 0.0;
+
+    @ManyToOne
+    @JoinColumn(name = "reporting_to")
+    @JsonBackReference // Prevent serialization of reportingTo to avoid cycles
+    private User reportingTo;
+
+    @OneToMany(mappedBy = "reportingTo")
+    @JsonManagedReference // Serialize subordinates, but avoid infinite recursion
+    private List<User> subordinates;
 
     // Getters and Setters
     public Long getId() {
@@ -85,11 +101,20 @@ public class User {
     }
 
     public String getDepartment() {
-        return department;
+        return departmentEntity != null ? departmentEntity.getName() : department;
     }
 
     public void setDepartment(String department) {
         this.department = department;
+    }
+
+    public Department getDepartmentEntity() {
+        return departmentEntity;
+    }
+
+    public void setDepartmentEntity(Department departmentEntity) {
+        this.departmentEntity = departmentEntity;
+        this.department = departmentEntity != null ? departmentEntity.getName() : null;
     }
 
     public String getRole() {
@@ -138,5 +163,21 @@ public class User {
 
     public void setHalfDayLwp(Double halfDayLwp) {
         this.halfDayLwp = halfDayLwp;
+    }
+
+    public User getReportingTo() {
+        return reportingTo;
+    }
+
+    public void setReportingTo(User reportingTo) {
+        this.reportingTo = reportingTo;
+    }
+
+    public List<User> getSubordinates() {
+        return subordinates;
+    }
+
+    public void setSubordinates(List<User> subordinates) {
+        this.subordinates = subordinates;
     }
 }

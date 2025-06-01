@@ -6,13 +6,15 @@ import com.hr_management.service.DepartmentService;
 import com.hr_management.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize; // Added import for PreAuthorize
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.Collections; // Added import for Collections
+import java.util.Optional;
+import java.util.Collections;
 import java.util.List;
-import java.util.Map; // Added import for Map
-import java.util.stream.Collectors; // Added import for Collectors
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api")
@@ -34,6 +36,32 @@ public class UserController {
     public ResponseEntity<List<Department>> getAllDepartments() {
         List<Department> departments = departmentService.getAllDepartments();
         return ResponseEntity.ok(departments);
+    }
+
+    @GetMapping("/departments/{id}")
+    public ResponseEntity<Department> getDepartmentById(@PathVariable Long id) {
+        // Get the current user and their role
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String username = authentication.getName();
+        User currentUser = userService.getCurrentUser();
+        String userRole = currentUser.getRole();
+        String userDepartment = currentUser.getDepartment();
+
+        // Fetch the department
+        Optional<Department> departmentOpt = departmentService.getDepartmentById(id);
+        if (departmentOpt.isEmpty()) {
+            return ResponseEntity.status(404).body(null);
+        }
+        Department department = departmentOpt.get();
+
+        // Restrict ASSISTANT_DIRECTOR to their own department
+        if (userRole.equals("ASSISTANT_DIRECTOR")) {
+            if (!department.getName().equals(userDepartment)) {
+                return ResponseEntity.status(403).body(null);
+            }
+        }
+
+        return ResponseEntity.ok(department);
     }
 
     class UserDTO {

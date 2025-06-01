@@ -31,7 +31,7 @@ public class LeaveController {
     private UserService userService;
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('EMPLOYEE', 'HOD')")
+    @PreAuthorize("hasAnyRole('EMPLOYEE', 'PROJECT_MANAGER', 'ASSISTANT_DIRECTOR', 'DIRECTOR')")
     public ResponseEntity<?> applyLeave(@RequestBody LeaveApplication application) {
         try {
             // Validate leave type
@@ -68,53 +68,35 @@ public class LeaveController {
         return ResponseEntity.ok(balance);
     }
 
-    @GetMapping("/department/pending")
-    @PreAuthorize("hasRole('HOD')")
-    public ResponseEntity<List<LeaveApplicationDTO>> getPendingLeavesByDepartment() {
-        User user = userService.getCurrentUser();
-        String departmentName = user.getDepartment();
-        List<LeaveApplicationDTO> leaves = leaveService.getPendingLeavesByDepartment(departmentName);
-        return ResponseEntity.ok(leaves);
-    }
-
-    @GetMapping("/department/stats")
-    @PreAuthorize("hasRole('HOD')")
-    public ResponseEntity<Map<String, Integer>> getDepartmentStats() {
-        User user = userService.getCurrentUser();
-        String departmentName = user.getDepartment();
-        Map<String, Integer> stats = leaveService.getDepartmentStats(departmentName);
-        return ResponseEntity.ok(stats);
-    }
-
-    @GetMapping("/hod/pending")
-    @PreAuthorize("hasRole('DIRECTOR')")
-    public ResponseEntity<List<LeaveApplicationDTO>> getPendingHodLeaves() {
+    @GetMapping("/pending")
+    @PreAuthorize("hasAnyRole('PROJECT_MANAGER', 'ASSISTANT_DIRECTOR', 'DIRECTOR')")
+    public ResponseEntity<List<LeaveApplicationDTO>> getPendingLeavesForCurrentUser() {
         try {
-            List<LeaveApplicationDTO> leaves = leaveService.getPendingHodLeavesForDirector();
+            List<LeaveApplicationDTO> leaves = leaveService.getPendingLeavesForCurrentUser();
             return ResponseEntity.ok(leaves);
         } catch (Exception e) {
-            logger.error("Error fetching pending HOD leaves: {}", e.getMessage(), e);
+            logger.error("Error fetching pending leaves: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Collections.emptyList());
         }
     }
 
-    @GetMapping("/hod/stats")
-    @PreAuthorize("hasRole('DIRECTOR')")
-    public ResponseEntity<Map<String, Integer>> getHodLeaveStats() {
-        Map<String, Integer> stats = leaveService.getHodLeaveStats();
+    @GetMapping("/stats")
+    @PreAuthorize("hasAnyRole('PROJECT_MANAGER', 'ASSISTANT_DIRECTOR', 'DIRECTOR')")
+    public ResponseEntity<Map<String, Integer>> getLeaveStatsForCurrentUser() {
+        Map<String, Integer> stats = leaveService.getLeaveStatsForCurrentUser();
         return ResponseEntity.ok(stats);
     }
 
     @PostMapping("/{id}/approve")
-    @PreAuthorize("hasAnyRole('HOD', 'DIRECTOR')")
+    @PreAuthorize("hasAnyRole('PROJECT_MANAGER', 'ASSISTANT_DIRECTOR', 'DIRECTOR')")
     public ResponseEntity<String> approveLeave(@PathVariable Long id) {
         leaveService.approveLeave(id);
         return ResponseEntity.ok("Leave approved successfully");
     }
 
     @PostMapping("/{id}/reject")
-    @PreAuthorize("hasAnyRole('HOD', 'DIRECTOR')")
+    @PreAuthorize("hasAnyRole('PROJECT_MANAGER', 'ASSISTANT_DIRECTOR', 'DIRECTOR')")
     public ResponseEntity<String> rejectLeave(@PathVariable Long id) {
         leaveService.rejectLeave(id);
         return ResponseEntity.ok("Leave rejected successfully");
