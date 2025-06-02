@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, User, Mail, Lock, Building } from 'lucide-react';
+import { Calendar, User, Mail, Lock, Building, Eye, EyeOff, Sparkles, Shield, ArrowRight } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 
 export default function Signup() {
@@ -21,6 +21,7 @@ export default function Signup() {
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [confirmPasswordVisible, setConfirmPasswordVisible] = useState(false);
   const [notification, setNotification] = useState({ message: '', type: '' });
+  const [focusedField, setFocusedField] = useState(''); // For input focus effects
   const navigate = useNavigate();
 
   // Normalize department name
@@ -299,295 +300,434 @@ export default function Signup() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50">
-      <header className="bg-blue-700 text-white py-4 px-6 shadow-md">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <img
-              src="/Images/bisag_logo.png"
-              alt="BISAG-N Logo"
-              className="h-20 w-30 rounded-full"
-            />
-            <h1 className="text-xl font-bold">BISAG-N HR Management System</h1>
+    <div className="min-h-screen relative overflow-hidden bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
+      {/* Animated background elements */}
+      <div className="absolute inset-0">
+        <div className="absolute top-20 left-20 w-72 h-72 bg-blue-500/10 rounded-full blur-3xl animate-pulse"></div>
+        <div className="absolute bottom-20 right-20 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl animate-pulse delay-1000"></div>
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-purple-500/5 rounded-full blur-3xl animate-pulse delay-500"></div>
+      </div>
+
+      {/* Grid pattern overlay */}
+      <div 
+        className="absolute inset-0" 
+        style={{
+          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.03'%3E%3Ccircle cx='30' cy='30' r='1'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+        }}
+      ></div>
+
+      {/* Professional Header */}
+      <header className="relative z-10 bg-white/10 backdrop-blur-md border-b border-white/20 shadow-2xl">
+        <div className="max-w-7xl mx-auto px-6 py-4">
+          <div className="flex items-center space-x-4">
+            <div className="relative">
+              <div className="absolute inset-0 bg-gradient-to-r from-blue-400 to-indigo-400 rounded-full blur-lg opacity-75"></div>
+              <div className="relative w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-xl">
+                <Shield className="w-8 h-8 text-blue-600" />
+              </div>
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-white bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent">
+                BISAG-N
+              </h1>
+              <p className="text-blue-200 text-sm font-medium">HR Management System</p>
+            </div>
+            <div className="flex-1"></div>
+            <div className="hidden md:flex items-center space-x-2 text-blue-200">
+              <Sparkles className="w-4 h-4" />
+              <span className="text-sm font-medium">Secure Access Portal</span>
+            </div>
           </div>
         </div>
       </header>
 
-      <div className="flex-1 flex items-center justify-center p-6">
-        <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
-          <div className="bg-blue-700 px-6 py-4">
-            <h2 className="text-xl font-bold text-white">Create Your Account</h2>
-            <p className="text-blue-100 text-sm">Join the BISAG-N team</p>
-          </div>
-
-          <div className="p-6">
-            {notification.message && (
-              <div
-                className={`mb-4 p-3 rounded-md text-sm ${
-                  notification.type === 'success'
-                    ? 'bg-green-100 text-green-700'
-                    : 'bg-red-100 text-red-700'
-                }`}
-              >
-                {notification.message}
-              </div>
-            )}
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+      {/* Main Content */}
+      <main className="relative z-10 flex-1 flex items-center justify-center p-6">
+        <div className="w-full max-w-md">
+          {/* Signup Card */}
+          <div className="relative">
+            {/* Glowing border effect */}
+            <div className="absolute -inset-1 bg-gradient-to-r from-blue-500 via-purple-500 to-indigo-500 rounded-2xl blur-lg opacity-75 animate-pulse"></div>
+            
+            <div className="relative bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl overflow-hidden border border-white/20">
+              {/* Card Header */}
+              <div className="relative bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 px-8 py-6">
+                <div className="absolute inset-0 bg-black/10"></div>
                 <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <User size={18} className="text-gray-400" />
+                  <div className="flex items-center space-x-3 mb-2">
+                    <div className="w-2 h-2 bg-green-400 rounded-full animate-ping"></div>
+                    <h2 className="text-2xl font-bold text-white">Create Your Account</h2>
                   </div>
-                  <input
-                    type="text"
-                    name="fullName"
-                    value={formData.fullName}
-                    onChange={handleChange}
-                    className="pl-10 block w-full rounded-md border border-gray-300 py-2 px-3 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    placeholder="John Doe"
-                  />
+                  <p className="text-blue-100 font-medium">Join the BISAG-N team</p>
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <User size={18} className="text-gray-400" />
-                  </div>
-                  <input
-                    type="text"
-                    name="username"
-                    value={formData.username}
-                    onChange={handleChange}
-                    className="pl-10 block w-full rounded-md border border-gray-300 py-2 px-3 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    placeholder="johndoe"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Mail size={18} className="text-gray-400" />
-                  </div>
-                  <input
-                    type="email"
-                    name="email"
-                    value={formData.email}
-                    onChange={handleChange}
-                    className="pl-10 block w-full rounded-md border border-gray-300 py-2 px-3 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    placeholder="john.doe@bisag-n.gov.in"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Building size={18} className="text-gray-400" />
-                  </div>
-                  <select
-                    name="department"
-                    value={formData.department}
-                    onChange={handleChange}
-                    disabled={formData.role === 'director'}
-                    className={`pl-10 block w-full rounded-md border border-gray-300 py-2 px-3 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 appearance-none ${
-                      formData.role === 'director' ? 'bg-gray-100 cursor-not-allowed' : ''
-                    }`}
-                  >
-                    <option value="">Select Department</option>
-                    {departments.length > 0 ? (
-                      departments.map((dept) => (
-                        <option key={dept.id || `dept-${dept.name}`} value={dept.name}>
-                          {dept.name}
-                        </option>
-                      ))
-                    ) : (
-                      <option value="" disabled>
-                        No departments available
-                      </option>
-                    )}
-                  </select>
-                </div>
-                {formData.role === 'director' && (
-                  <p className="text-xs text-gray-500 mt-1">Directors do not belong to any department.</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Building size={18} className="text-gray-400" />
-                  </div>
-                  <select
-                    name="role"
-                    value={formData.role}
-                    onChange={handleChange}
-                    className="pl-10 block w-full rounded-md border border-gray-300 py-2 px-3 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 appearance-none"
-                  >
-                    <option value="">Select Role</option>
-                    {roles.length > 0 ? (
-                      roles.map((role) => (
-                        <option key={role.id || `role-${role.name}`} value={role.name}>
-                          {role.displayName}
-                        </option>
-                      ))
-                    ) : (
-                      <option value="" disabled>
-                        No roles available
-                      </option>
-                    )}
-                  </select>
-                </div>
-              </div>
-
-              {isReportingPersonRequired() && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Reporting To</label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <User size={18} className="text-gray-400" />
-                    </div>
-                    <select
-                      name="reportingToId"
-                      value={formData.reportingToId || ''}
-                      onChange={handleChange}
-                      disabled={reportingPersons.length === 1}
-                      className={`pl-10 block w-full rounded-md border border-gray-300 py-2 px-3 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 appearance-none ${
-                        reportingPersons.length === 1 ? 'bg-gray-100 cursor-not-allowed' : ''
-                      }`}
-                    >
-                      <option value="">Select Reporting Person</option>
-                      {reportingPersons.length > 0 ? (
-                        reportingPersons.map((person) => (
-                          <option key={person.id} value={person.id}>
-                            {person.fullName} ({person.role})
-                          </option>
-                        ))
+              {/* Card Body */}
+              <div className="p-8">
+                {/* Notification Messages */}
+                {notification.message && (
+                  <div className="mb-6 relative">
+                    <div className={`absolute inset-0 rounded-xl blur-sm ${notification.type === 'success' ? 'bg-green-500/10' : 'bg-red-500/10'}`}></div>
+                    <div className={`relative flex items-center p-4 rounded-xl border ${notification.type === 'success' ? 'bg-green-50/80 backdrop-blur-sm text-green-700 border-green-200/50' : 'bg-red-50/80 backdrop-blur-sm text-red-700 border-red-200/50'}`}>
+                      {notification.type === 'success' ? (
+                        <CheckCircle size={20} className="flex-shrink-0 mr-3 text-green-500" />
                       ) : (
-                        <option value="" disabled>
-                          No reporting persons available
-                        </option>
+                        <AlertCircle size={20} className="flex-shrink-0 mr-3 text-red-500" />
                       )}
-                    </select>
+                      <p className="text-sm font-medium">{notification.message}</p>
+                    </div>
                   </div>
-                  {formData.role === 'ASSISTANT_DIRECTOR' && (
-                    <p className="text-xs text-gray-500 mt-1">Assistant Directors must report to the Director.</p>
+                )}
+
+                <form onSubmit={handleSubmit} className="space-y-6">
+                  {/* Full Name */}
+                  <div className="space-y-2">
+                    <label htmlFor="fullName" className="block text-sm font-semibold text-gray-700">
+                      Full Name
+                    </label>
+                    <div className="relative group">
+                      <div className={`absolute inset-0 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-xl opacity-0 group-hover:opacity-20 transition-opacity duration-300 ${focusedField === 'fullName' ? 'opacity-30' : ''}`}></div>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                          <User size={20} className={`transition-colors duration-300 ${focusedField === 'fullName' ? 'text-blue-500' : 'text-gray-400'}`} />
+                        </div>
+                        <input
+                          id="fullName"
+                          type="text"
+                          name="fullName"
+                          value={formData.fullName}
+                          onChange={handleChange}
+                          onFocus={() => setFocusedField('fullName')}
+                          onBlur={() => setFocusedField('')}
+                          className="pl-12 pr-4 block w-full h-12 rounded-xl border-2 border-gray-200 bg-white/80 backdrop-blur-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:bg-white transition-all duration-300"
+                          placeholder="John Doe"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Username */}
+                  <div className="space-y-2">
+                    <label htmlFor="username" className="block text-sm font-semibold text-gray-700">
+                      Username
+                    </label>
+                    <div className="relative group">
+                      <div className={`absolute inset-0 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-xl opacity-0 group-hover:opacity-20 transition-opacity duration-300 ${focusedField === 'username' ? 'opacity-30' : ''}`}></div>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                          <User size={20} className={`transition-colors duration-300 ${focusedField === 'username' ? 'text-blue-500' : 'text-gray-400'}`} />
+                        </div>
+                        <input
+                          id="username"
+                          type="text"
+                          name="username"
+                          value={formData.username}
+                          onChange={handleChange}
+                          onFocus={() => setFocusedField('username')}
+                          onBlur={() => setFocusedField('')}
+                          className="pl-12 pr-4 block w-full h-12 rounded-xl border-2 border-gray-200 bg-white/80 backdrop-blur-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:bg-white transition-all duration-300"
+                          placeholder="johndoe"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Email */}
+                  <div className="space-y-2">
+                    <label htmlFor="email" className="block text-sm font-semibold text-gray-700">
+                      Email Address
+                    </label>
+                    <div className="relative group">
+                      <div className={`absolute inset-0 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-xl opacity-0 group-hover:opacity-20 transition-opacity duration-300 ${focusedField === 'email' ? 'opacity-30' : ''}`}></div>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                          <Mail size={20} className={`transition-colors duration-300 ${focusedField === 'email' ? 'text-blue-500' : 'text-gray-400'}`} />
+                        </div>
+                        <input
+                          id="email"
+                          type="email"
+                          name="email"
+                          value={formData.email}
+                          onChange={handleChange}
+                          onFocus={() => setFocusedField('email')}
+                          onBlur={() => setFocusedField('')}
+                          className="pl-12 pr-4 block w-full h-12 rounded-xl border-2 border-gray-200 bg-white/80 backdrop-blur-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:bg-white transition-all duration-300"
+                          placeholder="john.doe@bisag-n.gov.in"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Department */}
+                  <div className="space-y-2">
+                    <label htmlFor="department" className="block text-sm font-semibold text-gray-700">
+                      Department
+                    </label>
+                    <div className="relative group">
+                      <div className={`absolute inset-0 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-xl opacity-0 group-hover:opacity-20 transition-opacity duration-300 ${focusedField === 'department' ? 'opacity-30' : ''}`}></div>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                          <Building size={20} className={`transition-colors duration-300 ${focusedField === 'department' ? 'text-blue-500' : 'text-gray-400'}`} />
+                        </div>
+                        <select
+                          id="department"
+                          name="department"
+                          value={formData.department}
+                          onChange={handleChange}
+                          onFocus={() => setFocusedField('department')}
+                          onBlur={() => setFocusedField('')}
+                          disabled={formData.role === 'director'}
+                          className={`pl-12 pr-4 block w-full h-12 rounded-xl border-2 border-gray-200 bg-white/80 backdrop-blur-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:bg-white transition-all duration-300 appearance-none ${formData.role === 'director' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        >
+                          <option value="">Select Department</option>
+                          {departments.length > 0 ? (
+                            departments.map((dept) => (
+                              <option key={dept.id || `dept-${dept.name}`} value={dept.name}>
+                                {dept.name}
+                              </option>
+                            ))
+                          ) : (
+                            <option value="" disabled>
+                              No departments available
+                            </option>
+                          )}
+                        </select>
+                      </div>
+                    </div>
+                    {formData.role === 'director' && (
+                      <p className="text-xs text-gray-500 mt-1">Directors do not belong to any department.</p>
+                    )}
+                  </div>
+
+                  {/* Role */}
+                  <div className="space-y-2">
+                    <label htmlFor="role" className="block text-sm font-semibold text-gray-700">
+                      Role
+                    </label>
+                    <div className="relative group">
+                      <div className={`absolute inset-0 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-xl opacity-0 group-hover:opacity-20 transition-opacity duration-300 ${focusedField === 'role' ? 'opacity-30' : ''}`}></div>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                          <Building size={20} className={`transition-colors duration-300 ${focusedField === 'role' ? 'text-blue-500' : 'text-gray-400'}`} />
+                        </div>
+                        <select
+                          id="role"
+                          name="role"
+                          value={formData.role}
+                          onChange={handleChange}
+                          onFocus={() => setFocusedField('role')}
+                          onBlur={() => setFocusedField('')}
+                          className="pl-12 pr-4 block w-full h-12 rounded-xl border-2 border-gray-200 bg-white/80 backdrop-blur-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:bg-white transition-all duration-300 appearance-none"
+                        >
+                          <option value="">Select Role</option>
+                          {roles.length > 0 ? (
+                            roles.map((role) => (
+                              <option key={role.id || `role-${role.name}`} value={role.name}>
+                                {role.displayName}
+                              </option>
+                            ))
+                          ) : (
+                            <option value="" disabled>
+                              No roles available
+                            </option>
+                          )}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Reporting To */}
+                  {isReportingPersonRequired() && (
+                    <div className="space-y-2">
+                      <label htmlFor="reportingToId" className="block text-sm font-semibold text-gray-700">
+                        Reporting To
+                      </label>
+                      <div className="relative group">
+                        <div className={`absolute inset-0 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-xl opacity-0 group-hover:opacity-20 transition-opacity duration-300 ${focusedField === 'reportingToId' ? 'opacity-30' : ''}`}></div>
+                        <div className="relative">
+                          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                            <User size={20} className={`transition-colors duration-300 ${focusedField === 'reportingToId' ? 'text-blue-500' : 'text-gray-400'}`} />
+                          </div>
+                          <select
+                            id="reportingToId"
+                            name="reportingToId"
+                            value={formData.reportingToId || ''}
+                            onChange={handleChange}
+                            onFocus={() => setFocusedField('reportingToId')}
+                            onBlur={() => setFocusedField('')}
+                            disabled={reportingPersons.length === 1}
+                            className={`pl-12 pr-4 block w-full h-12 rounded-xl border-2 border-gray-200 bg-white/80 backdrop-blur-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:bg-white transition-all duration-300 appearance-none ${reportingPersons.length === 1 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          >
+                            <option value="">Select Reporting Person</option>
+                            {reportingPersons.length > 0 ? (
+                              reportingPersons.map((person) => (
+                                <option key={person.id} value={person.id}>
+                                  {person.fullName} ({person.role})
+                                </option>
+                              ))
+                            ) : (
+                              <option value="" disabled>
+                                No reporting persons available
+                              </option>
+                            )}
+                          </select>
+                        </div>
+                      </div>
+                      {formData.role === 'ASSISTANT_DIRECTOR' && (
+                        <p className="text-xs text-gray-500 mt-1">Assistant Directors must report to the Director.</p>
+                      )}
+                    </div>
                   )}
-                </div>
-              )}
-              {!isReportingPersonRequired() && formData.department && formData.role && (
-                <p className="text-xs text-gray-500 mt-1">
-                  {formData.role === 'director' 
-                    ? 'Directors do not report to anyone.' 
-                    : 'HR members in Admin department do not require a reporting person.'}
-                </p>
-              )}
+                  {!isReportingPersonRequired() && formData.department && formData.role && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      {formData.role === 'director' 
+                        ? 'Directors do not report to anyone.' 
+                        : 'HR members in Admin department do not require a reporting person.'}
+                    </p>
+                  )}
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <User size={18} className="text-gray-400" />
+                  {/* Gender */}
+                  <div className="space-y-2">
+                    <label htmlFor="gender" className="block text-sm font-semibold text-gray-700">
+                      Gender
+                    </label>
+                    <div className="relative group">
+                      <div className={`absolute inset-0 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-xl opacity-0 group-hover:opacity-20 transition-opacity duration-300 ${focusedField === 'gender' ? 'opacity-30' : ''}`}></div>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                          <User size={20} className={`transition-colors duration-300 ${focusedField === 'gender' ? 'text-blue-500' : 'text-gray-400'}`} />
+                        </div>
+                        <select
+                          id="gender"
+                          name="gender"
+                          value={formData.gender}
+                          onChange={handleChange}
+                          onFocus={() => setFocusedField('gender')}
+                          onBlur={() => setFocusedField('')}
+                          className="pl-12 pr-4 block w-full h-12 rounded-xl border-2 border-gray-200 bg-white/80 backdrop-blur-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:bg-white transition-all duration-300 appearance-none"
+                        >
+                          <option value="">Select Gender</option>
+                          <option value="Male">Male</option>
+                          <option value="Female">Female</option>
+                          <option value="Other">Other</option>
+                        </select>
+                      </div>
+                    </div>
                   </div>
-                  <select
-                    name="gender"
-                    value={formData.gender}
-                    onChange={handleChange}
-                    className="pl-10 block w-full rounded-md border border-gray-300 py-2 px-3 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 appearance-none"
+
+                  {/* Password */}
+                  <div className="space-y-2">
+                    <label htmlFor="password" className="block text-sm font-semibold text-gray-700">
+                      Password
+                    </label>
+                    <div className="relative group">
+                      <div className={`absolute inset-0 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-xl opacity-0 group-hover:opacity-20 transition-opacity duration-300 ${focusedField === 'password' ? 'opacity-30' : ''}`}></div>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                          <Lock size={20} className={`transition-colors duration-300 ${focusedField === 'password' ? 'text-blue-500' : 'text-gray-400'}`} />
+                        </div>
+                        <input
+                          id="password"
+                          type={passwordVisible ? 'text' : 'password'}
+                          name="password"
+                          value={formData.password}
+                          onChange={handleChange}
+                          onFocus={() => setFocusedField('password')}
+                          onBlur={() => setFocusedField('')}
+                          className="pl-12 pr-12 block w-full h-12 rounded-xl border-2 border-gray-200 bg-white/80 backdrop-blur-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:bg-white transition-all duration-300"
+                          placeholder="Create a strong password"
+                        />
+                        <button
+                          type="button"
+                          onClick={togglePasswordVisibility}
+                          className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-blue-500 transition-colors duration-300"
+                        >
+                          {passwordVisible ? <EyeOff size={20} /> : <Eye size={20} />}
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">Password must be at least 8 characters long</p>
+                  </div>
+
+                  {/* Confirm Password */}
+                  <div className="space-y-2">
+                    <label htmlFor="confirmPassword" className="block text-sm font-semibold text-gray-700">
+                      Confirm Password
+                    </label>
+                    <div className="relative group">
+                      <div className={`absolute inset-0 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-xl opacity-0 group-hover:opacity-20 transition-opacity duration-300 ${focusedField === 'confirmPassword' ? 'opacity-30' : ''}`}></div>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                          <Lock size={20} className={`transition-colors duration-300 ${focusedField === 'confirmPassword' ? 'text-blue-500' : 'text-gray-400'}`} />
+                        </div>
+                        <input
+                          id="confirmPassword"
+                          type={confirmPasswordVisible ? 'text' : 'password'}
+                          name="confirmPassword"
+                          value={formData.confirmPassword}
+                          onChange={handleChange}
+                          onFocus={() => setFocusedField('confirmPassword')}
+                          onBlur={() => setFocusedField('')}
+                          className="pl-12 pr-12 block w-full h-12 rounded-xl border-2 border-gray-200 bg-white/80 backdrop-blur-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:bg-white transition-all duration-300"
+                          placeholder="Confirm password"
+                        />
+                        <button
+                          type="button"
+                          onClick={toggleConfirmPasswordVisibility}
+                          className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-blue-500 transition-colors duration-300"
+                        >
+                          {confirmPasswordVisible ? <EyeOff size={20} /> : <Eye size={20} />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Submit Button */}
+                  <button
+                    type="submit"
+                    className="relative w-full h-12 rounded-xl font-semibold text-white shadow-lg transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98] bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 hover:from-blue-700 hover:via-blue-800 hover:to-indigo-800 shadow-blue-500/25 hover:shadow-blue-500/40"
                   >
-                    <option value="">Select Gender</option>
-                    <option value="Male">Male</option>
-                    <option value="Female">Female</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </div>
-              </div>
+                    <div className="absolute inset-0 bg-white/20 rounded-xl opacity-0 hover:opacity-100 transition-opacity duration-300"></div>
+                    <div className="relative flex items-center justify-center space-x-2">
+                      <span>Create Account</span>
+                      <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform duration-300" />
+                    </div>
+                  </button>
+                </form>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Lock size={18} className="text-gray-400" />
-                  </div>
-                  <input
-                    type={passwordVisible ? 'text' : 'password'}
-                    name="password"
-                    value={formData.password}
-                    onChange={handleChange}
-                    className="pl-10 block w-full rounded-md border border-gray-300 py-2 px-3 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    placeholder="Create a strong password"
-                  />
-                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
-                    <button
-                      type="button"
-                      onClick={togglePasswordVisibility}
-                      className="text-gray-400 hover:text-gray-500 focus:outline-none"
+                {/* Sign In Link */}
+                <div className="mt-8 text-center">
+                  <p className="text-gray-600">
+                    Already have an account?{' '}
+                    <Link
+                      to="/"
+                      className="font-semibold text-blue-600 hover:text-blue-700 transition-colors duration-300 hover:underline"
                     >
-                      {passwordVisible ? 'Hide' : 'Show'}
-                    </button>
-                  </div>
-                </div>
-                <p className="text-xs text-gray-500 mt-1">Password must be at least 8 characters long</p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Password</label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Lock size={18} className="text-gray-400" />
-                  </div>
-                  <input
-                    type={confirmPasswordVisible ? 'text' : 'password'}
-                    name="confirmPassword"
-                    value={formData.confirmPassword}
-                    onChange={handleChange}
-                    className="pl-10 block w-full rounded-md border border-gray-300 py-2 px-3 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    placeholder="Confirm password"
-                  />
-                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
-                    <button
-                      type="button"
-                      onClick={toggleConfirmPasswordVisibility}
-                      className="text-gray-400 hover:text-gray-500 focus:outline-none"
-                    >
-                      {confirmPasswordVisible ? 'Hide' : 'Show'}
-                    </button>
-                  </div>
+                      Sign in
+                    </Link>
+                  </p>
                 </div>
               </div>
-
-              <div className="pt-2">
-                <button
-                  type="submit"
-                  className="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-700 hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors duration-200"
-                >
-                  Create Account
-                </button>
-              </div>
-            </form>
-
-            <div className="mt-6 text-center">
-              <p className="text-sm text-gray-600">
-                Already have an account?{' '}
-                <Link to="/" className="font-medium text-blue-600 hover:text-blue-500">
-                  Sign in
-                </Link>
-              </p>
             </div>
           </div>
-        </div>
-      </div>
 
-      <footer className="bg-blue-700 text-white py-4 text-center shadow-inner">
-        <div className="max-w-7xl mx-auto px-4 text-center text-sm text-white-500">
-          <p>© 2025 BISAG-N. All rights reserved.</p>
+          {/* Additional Info */}
+          <div className="mt-8 text-center">
+            <p className="text-blue-200/80 text-sm">
+              Secure signup powered by advanced encryption
+            </p>
+          </div>
+        </div>
+      </main>
+
+      {/* Professional Footer */}
+      <footer className="relative z-10 bg-black/20 backdrop-blur-md border-t border-white/10 text-white py-6">
+        <div className="max-w-7xl mx-auto px-6 text-center">
+          <div className="flex items-center justify-center space-x-2 mb-2">
+            <Shield className="w-4 h-4 text-blue-400" />
+            <p className="text-sm font-medium">© 2025 BISAG-N. All rights reserved.</p>
+          </div>
+          <p className="text-xs text-blue-200/60">Bhaskaracharya National Institute for Space Applications and Geo-informatics</p>
         </div>
       </footer>
     </div>
