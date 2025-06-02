@@ -155,7 +155,7 @@ export default function Login() {
                                 <div className="relative">
                                     <div className="flex items-center space-x-3 mb-2">
                                         <div className="w-2 h-2 bg-green-400 rounded-full animate-ping"></div>
-                                        <h2 className="text-2xl font-bold text-white">Welcome Back</h2>
+                                        <h2 className="text-2xl font-bold text-white">Welcome</h2>
                                     </div>
                                     <p className="text-blue-100 font-medium">Sign in to access your dashboard</p>
                                 </div>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Users, Clock, UserCheck, Briefcase, LogOut, Menu, X, ChevronLeft, ChevronRight, Download, CheckCircle, XCircle } from 'lucide-react';
+import { Users, Clock, Briefcase, LogOut, Building, Menu, X, ChevronLeft, ChevronRight, Download, CheckCircle, XCircle, Calendar } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import ExcelJS from 'exceljs';
 
@@ -25,6 +25,7 @@ export default function AssistantDirectorDash() {
     projectManagers: 0,
     assistantDirectors: 0,
   });
+  const [activeView, setActiveView] = useState('dashboard');
   const navigate = useNavigate();
 
   // Fetch user and department data
@@ -32,6 +33,7 @@ export default function AssistantDirectorDash() {
     const fetchUserAndDepartmentData = async () => {
       try {
         setIsLoading(true);
+        setError('');
         const token = localStorage.getItem('authToken');
         if (!token) {
           setError('Please log in to continue');
@@ -39,119 +41,133 @@ export default function AssistantDirectorDash() {
           return;
         }
 
-        // Fetch user data
+        console.log('Fetching user data...');
         const userResponse = await fetch('http://localhost:8081/api/users/me', {
           headers: { 'Authorization': `Bearer ${token}` },
         });
-        if (userResponse.ok) {
-          const user = await userResponse.json();
-          if (user.role !== 'ASSISTANT_DIRECTOR') {
-            setError('Access denied. This dashboard is for Assistant Directors only.');
+        if (!userResponse.ok) {
+          if (userResponse.status === 401) {
+            setError('Session expired. Please log in again.');
+            localStorage.removeItem('authToken');
             navigate('/');
             return;
           }
-          setUserData(user);
-        } else if (userResponse.status === 401) {
-          setError('Session expired. Please log in again.');
-          localStorage.removeItem('authToken');
+          throw new Error(`Failed to fetch user data: ${userResponse.status}`);
+        }
+        const user = await userResponse.json();
+        console.log('User data:', user);
+        if (user.role !== 'ASSISTANT_DIRECTOR') {
+          setError('Access denied. This dashboard is for Assistant Directors only.');
           navigate('/');
           return;
-        } else {
-          setError('Failed to fetch user data');
-          return;
         }
+        setUserData(user);
 
-        // Fetch department data by name (since user.department is a string)
+        // Fetch department data
+        console.log('Fetching department data...');
         const departmentsResponse = await fetch('http://localhost:8081/api/departments', {
           headers: { 'Authorization': `Bearer ${token}` },
         });
-        if (departmentsResponse.ok) {
-          const departments = await departmentsResponse.json();
-          const userDepartment = departments.find(dept => dept.name === userData.department);
-          if (userDepartment) {
-            setDepartmentData({
-              id: userDepartment.id,
-              name: userDepartment.name || 'Unnamed Department',
-              description: userDepartment.description || '',
-              employeeCount: userDepartment.employeeCount || 0,
-              onLeaveCount: userDepartment.onLeaveCount || 0,
-            });
-          } else {
-            setError('Your department was not found');
-            return;
-          }
-        } else {
-          setError('Failed to fetch department data');
+        if (!departmentsResponse.ok) {
+          throw new Error(`Failed to fetch departments: ${departmentsResponse.status}`);
+        }
+        const departments = await departmentsResponse.json();
+        console.log('Departments:', departments);
+        const userDepartment = departments.find(dept => dept.name === user.department);
+        if (!userDepartment) {
+          setError('Your department was not found');
           return;
         }
+        setDepartmentData({
+          id: userDepartment.id,
+          name: userDepartment.name || 'Unnamed Department',
+          description: userDepartment.description || '',
+          employeeCount: userDepartment.employeeCount || 0,
+          onLeaveCount: userDepartment.onLeaveCount || 0,
+        });
       } catch (err) {
-        setError('Failed to load dashboard data');
+        console.error('Error in fetchUserAndDepartmentData:', err);
+        setError(`Failed to load dashboard data: ${err.message}`);
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchUserAndDepartmentData();
-  }, [navigate, userData?.department]); // Only depend on userData.department
+  }, [navigate]);
 
-  // Fetch department metrics, employees, leave requests, and stats after departmentData is available
+  // Fetch department-related data
   useEffect(() => {
     const fetchDepartmentRelatedData = async () => {
-      if (!departmentData?.id) return; // Skip if departmentData.id is not available
+      if (!departmentData?.id) {
+        console.log('No department ID, skipping department-related data fetch');
+        return;
+      }
 
       try {
         setIsLoading(true);
+        setError('');
         const token = localStorage.getItem('authToken');
+        if (!token) {
+          setError('Session expired. Please log in again.');
+          navigate('/');
+          return;
+        }
 
-        // Fetch department employees
+        console.log('Fetching employees for department ID:', departmentData.id);
         await fetchEmployeesInDepartment(departmentData.id, token);
 
-        // Fetch leave requests
+        console.log('Fetching leave requests...');
         const leaveResponse = await fetch('http://localhost:8081/api/leaves/pending', {
           headers: { 'Authorization': `Bearer ${token}` },
         });
-        if (leaveResponse.ok) {
-          setLeaveRequests(await leaveResponse.json());
-        } else {
-          setError('Failed to fetch subordinate leave applications');
+        if (!leaveResponse.ok) {
+          throw new Error(`Failed to fetch leave requests: ${leaveResponse.status}`);
         }
+        const leaveData = await leaveResponse.json();
+        console.log('Leave requests:', leaveData);
+        setLeaveRequests(leaveData);
 
-        // Fetch leave stats
+        console.log('Fetching leave stats...');
         const statsResponse = await fetch('http://localhost:8081/api/leaves/stats', {
           headers: { 'Authorization': `Bearer ${token}` },
         });
-        if (statsResponse.ok) {
-          setLeaveStats(await statsResponse.json());
-        } else {
-          setError('Failed to fetch leave stats');
+        if (!statsResponse.ok) {
+          throw new Error(`Failed to fetch leave stats: ${statsResponse.status}`);
         }
+        const statsData = await statsResponse.json();
+        console.log('Leave stats:', statsData);
+        setLeaveStats(statsData);
 
-        // Fetch department metrics
+        console.log('Fetching department metrics...');
         const dashboardResponse = await fetch(`http://localhost:8081/api/hr/department-metrics/${departmentData.id}`, {
           headers: { 'Authorization': `Bearer ${token}` },
         });
-        if (dashboardResponse.ok) {
-          const data = await dashboardResponse.json();
-          setOverallData({
-            totalEmployees: data.totalEmployees || 0,
-            onLeaveToday: data.onLeaveToday || 0,
-            projectManagers: data.projectManagers || 0,
-            assistantDirectors: data.assistantDirectors || 0,
-          });
-        } else if (dashboardResponse.status === 403) {
-          setError('You do not have permission to access this department’s metrics');
-        } else {
-          setError('Failed to fetch department metrics');
+        if (!dashboardResponse.ok) {
+          if (dashboardResponse.status === 403) {
+            setError('You do not have permission to access this department’s metrics');
+            return;
+          }
+          throw new Error(`Failed to fetch department metrics: ${dashboardResponse.status}`);
         }
+        const data = await dashboardResponse.json();
+        console.log('Department metrics:', data);
+        setOverallData({
+          totalEmployees: data.totalEmployees || 0,
+          onLeaveToday: data.onLeaveToday || 0,
+          projectManagers: data.projectManagers || 0,
+          assistantDirectors: data.assistantDirectors || 0,
+        });
       } catch (err) {
-        setError('Failed to load department-related data');
+        console.error('Error in fetchDepartmentRelatedData:', err);
+        setError(`Failed to load department-related data: ${err.message}`);
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchDepartmentRelatedData();
-  }, [departmentData?.id]); // Depend on departmentData.id to trigger this effect
+  }, [departmentData?.id, navigate]);
 
   useEffect(() => {
     if (notification.message) {
@@ -161,10 +177,14 @@ export default function AssistantDirectorDash() {
   }, [notification]);
 
   const fetchEmployeesInDepartment = async (deptId, token) => {
-    if (!deptId) return; // Prevent fetching if deptId is not available
+    if (!deptId) {
+      console.log('No department ID provided for employee fetch');
+      return;
+    }
     try {
       setIsLoading(true);
       setError(null);
+      console.log('Fetching employees for deptId:', deptId);
       const response = await fetch(`http://localhost:8081/api/hr/departments/${deptId}/employees`, {
         method: 'GET',
         headers: {
@@ -178,10 +198,11 @@ export default function AssistantDirectorDash() {
           setError('You do not have permission to access this department’s employees');
           return;
         }
-        throw new Error(`HTTP error! Status: ${response.status} ${response.statusText}`);
+        throw new Error(`Failed to fetch employees: ${response.status} ${response.statusText}`);
       }
 
       const data = await response.json();
+      console.log('Employees data:', data);
       const formattedEmployees = data.map(employee => {
         const getDatesInRange = (startDate, endDate) => {
           const dates = [];
@@ -258,7 +279,8 @@ export default function AssistantDirectorDash() {
 
       setEmployeesInDepartment(formattedEmployees);
     } catch (error) {
-      setError('Failed to load employee data. Please try again later.');
+      console.error('Error in fetchEmployeesInDepartment:', error);
+      setError(`Failed to load employee data: ${error.message}`);
       setEmployeesInDepartment([]);
     } finally {
       setIsLoading(false);
@@ -276,8 +298,8 @@ export default function AssistantDirectorDash() {
     const day = date.getDay();
     const dateOfMonth = date.getDate();
     const weekOfMonth = Math.floor((dateOfMonth - 1) / 7) + 1;
-    if (day === 0) return false; // Sunday
-    if (day === 6) return !(weekOfMonth === 2 || weekOfMonth === 4); // Second/Fourth Saturday
+    if (day === 0) return false;
+    if (day === 6) return !(weekOfMonth === 2 || weekOfMonth === 4);
     return true;
   };
 
@@ -304,7 +326,8 @@ export default function AssistantDirectorDash() {
         setNotification({ message: 'Failed to approve leave', type: 'error' });
       }
     } catch (err) {
-      setNotification({ message: 'Failed to approve leave', type: 'error' });
+      console.error('Error in handleApprove:', err);
+      setNotification({ message: `Failed to approve leave: ${err.message}`, type: 'error' });
     }
   };
 
@@ -331,7 +354,8 @@ export default function AssistantDirectorDash() {
         setNotification({ message: 'Failed to reject leave', type: 'error' });
       }
     } catch (err) {
-      setNotification({ message: 'Failed to reject leave', type: 'error' });
+      console.error('Error in handleReject:', err);
+      setNotification({ message: `Failed to reject leave: ${err.message}`, type: 'error' });
     }
   };
 
@@ -407,12 +431,15 @@ export default function AssistantDirectorDash() {
       URL.revokeObjectURL(link.href);
       setNotification({ message: 'Leave report exported successfully', type: 'success' });
     } catch (error) {
-      setNotification({ message: 'Failed to export leave report.', type: 'error' });
+      console.error('Error in handleExportExcel:', error);
+      setNotification({ message: `Failed to export leave report: ${error.message}`, type: 'error' });
     }
   };
 
   const handleEmployeeClick = (employee) => {
+    console.log('Selected employee:', employee);
     setSelectedEmployee(employee);
+    setActiveView('employee-view');
   };
 
   const handleMonthChange = (increment) => {
@@ -423,6 +450,7 @@ export default function AssistantDirectorDash() {
 
   const backToDepartment = () => {
     setSelectedEmployee(null);
+    setActiveView('department-view');
   };
 
   const handleLogout = () => {
@@ -694,29 +722,9 @@ export default function AssistantDirectorDash() {
     );
   };
 
-  const renderDashboardView = () => {
+  const renderApproveLeavesView = () => {
     return (
       <div className="space-y-8">
-        <div className="bg-white rounded-lg shadow-lg p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-6">Department Metrics</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {metrics.map(metric => (
-              <div
-                key={metric.key}
-                className={`bg-white rounded-lg p-5 border-l-4 ${metric.borderColor} shadow-md hover:shadow-lg transition-all duration-200`}
-              >
-                <div className="flex items-center space-x-3">
-                  {metric.icon}
-                  <div>
-                    <div className="text-sm font-medium text-gray-600">{metric.title}</div>
-                    <div className="text-2xl font-bold text-gray-900">{metric.value}</div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
         <div className="bg-white rounded-lg shadow-lg p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Pending Subordinate Leave Requests</h3>
           {isLoading ? (
@@ -792,7 +800,34 @@ export default function AssistantDirectorDash() {
     );
   };
 
+  const renderDashboardView = () => {
+    return (
+      <div className="space-y-8">
+        <div className="bg-white rounded-lg shadow-lg p-6">
+          <h2 className="text-xl font-semibold text-gray-900 mb-6">Department Metrics</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {metrics.map(metric => (
+              <div
+                key={metric.key}
+                className={`bg-white rounded-lg p-5 border-l-4 ${metric.borderColor} shadow-md hover:shadow-lg transition-all duration-200`}
+              >
+                <div className="flex items-center space-x-3">
+                  {metric.icon}
+                  <div>
+                    <div className="text-sm font-medium text-gray-600">{metric.title}</div>
+                    <div className="text-2xl font-bold text-gray-900">{metric.value}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderMainContent = () => {
+    console.log('Rendering main content, activeView:', activeView, 'isLoading:', isLoading, 'error:', error);
     if (isLoading) {
       return (
         <div className="flex justify-center items-center h-64">
@@ -812,20 +847,27 @@ export default function AssistantDirectorDash() {
       );
     }
 
-    if (selectedEmployee) {
-      return renderEmployeeView();
-    } else {
-      return renderDepartmentView();
+    switch (activeView) {
+      case 'employee-view':
+        return renderEmployeeView();
+      case 'department-view':
+        return renderDepartmentView();
+      case 'approve-leaves':
+        return renderApproveLeavesView();
+      default:
+        return renderDashboardView();
     }
   };
 
   const metrics = [
     { key: 'total-employees', title: 'Total Employees', value: overallData.totalEmployees, borderColor: 'border-blue-500', icon: <Users size={24} className="text-blue-500" /> },
     { key: 'on-leave-today', title: 'On Leave Today', value: overallData.onLeaveToday, borderColor: 'border-red-500', icon: <Clock size={24} className="text-red-500" /> },
-    { key: 'total-managers', title: 'Total Managers', value: overallData.projectManagers, borderColor: 'border-green-500', icon: <Briefcase size={24} className="text-green-500" /> },  ];
+    { key: 'total-managers', title: 'Total Managers', value: overallData.projectManagers, borderColor: 'border-green-500', icon: <Briefcase size={24} className="text-green-500" /> },
+  ];
 
   return (
     <div className="min-h-screen bg-gray-50 flex font-sans">
+      {/* Sidebar */}
       <div className={`fixed inset-y-0 left-0 z-30 w-64 bg-blue-900 text-white transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 transition-transform duration-300 ease-in-out shadow-lg`}>
         <div className="flex items-center justify-between p-4 border-b border-blue-800">
           <div className="flex items-center space-x-3">
@@ -837,7 +879,33 @@ export default function AssistantDirectorDash() {
           </button>
         </div>
         <nav className="p-4 space-y-2">
-        
+          <button
+            onClick={() => setActiveView('dashboard')}
+            className={`flex items-center w-full p-3 text-left rounded-lg transition duration-200 ${
+              activeView === 'dashboard' ? 'bg-blue-800' : 'hover:bg-blue-800'
+            }`}
+          >
+            <Users size={20} className="mr-3" />
+            Dashboard
+          </button>
+          <button
+            onClick={() => setActiveView('department-view')}
+            className={`flex items-center w-full p-3 text-left rounded-lg transition duration-200 ${
+              activeView === 'department-view' ? 'bg-blue-800' : 'hover:bg-blue-800'
+            }`}
+          >
+            <Building size={20} className="mr-3" />
+            Department View
+          </button>
+          <button
+            onClick={() => setActiveView('approve-leaves')}
+            className={`flex items-center w-full p-3 text-left rounded-lg transition duration-200 ${
+              activeView === 'approve-leaves' ? 'bg-blue-800' : 'hover:bg-blue-800'
+            }`}
+          >
+            <Calendar size={20} className="mr-3" />
+            Approve Leaves
+          </button>
           <button onClick={handleLogout} className="flex items-center w-full p-3 text-left rounded-lg hover:bg-red-600 transition duration-200">
             <LogOut size={20} className="mr-3" />
             Logout
@@ -845,6 +913,7 @@ export default function AssistantDirectorDash() {
         </nav>
       </div>
 
+      {/* Main Content */}
       <div className="flex-1 flex flex-col lg:ml-64">
         <header className="bg-white shadow-lg p-4 flex items-center justify-between">
           <div className="flex items-center">
@@ -854,7 +923,7 @@ export default function AssistantDirectorDash() {
             <h1 className="text-2xl font-semibold text-gray-900">Assistant Director Dashboard</h1>
           </div>
           <div className="flex items-center space-x-4">
-            <span className="text-gray-700 font-medium">Welcome, {userData?.fullName}</span>
+            <span className="text-gray-700 font-medium">Welcome, {userData?.fullName || 'User'}</span>
             <img src="/Images/bisag_logo.png" alt="BISAG-N Logo" className="h-8 w-8 rounded-full" />
           </div>
         </header>
@@ -873,7 +942,6 @@ export default function AssistantDirectorDash() {
           )}
 
           <div className="space-y-8">
-            {renderDashboardView()}
             {renderMainContent()}
           </div>
         </main>
