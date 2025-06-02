@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, User, Mail, Lock, Building, Eye, EyeOff, Sparkles, Shield, ArrowRight } from 'lucide-react';
+import { Calendar, User, Mail, Lock, Building, Eye, EyeOff, Sparkles, Shield, ArrowRight, AlertCircle, CheckCircle } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 
 export default function Signup() {
