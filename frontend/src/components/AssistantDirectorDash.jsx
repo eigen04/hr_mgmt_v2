@@ -40,8 +40,6 @@ export default function AssistantDirectorDash() {
           navigate('/');
           return;
         }
-
-        console.log('Fetching user data...');
         const userResponse = await fetch('http://localhost:8081/api/users/me', {
           headers: { 'Authorization': `Bearer ${token}` },
         });
@@ -55,16 +53,12 @@ export default function AssistantDirectorDash() {
           throw new Error(`Failed to fetch user data: ${userResponse.status}`);
         }
         const user = await userResponse.json();
-        console.log('User data:', user);
         if (user.role !== 'ASSISTANT_DIRECTOR') {
           setError('Access denied. This dashboard is for Assistant Directors only.');
           navigate('/');
           return;
         }
         setUserData(user);
-
-        // Fetch department data
-        console.log('Fetching department data...');
         const departmentsResponse = await fetch('http://localhost:8081/api/departments', {
           headers: { 'Authorization': `Bearer ${token}` },
         });
@@ -72,7 +66,6 @@ export default function AssistantDirectorDash() {
           throw new Error(`Failed to fetch departments: ${departmentsResponse.status}`);
         }
         const departments = await departmentsResponse.json();
-        console.log('Departments:', departments);
         const userDepartment = departments.find(dept => dept.name === user.department);
         if (!userDepartment) {
           setError('Your department was not found');
@@ -100,7 +93,6 @@ export default function AssistantDirectorDash() {
   useEffect(() => {
     const fetchDepartmentRelatedData = async () => {
       if (!departmentData?.id) {
-        console.log('No department ID, skipping department-related data fetch');
         return;
       }
 
@@ -113,11 +105,7 @@ export default function AssistantDirectorDash() {
           navigate('/');
           return;
         }
-
-        console.log('Fetching employees for department ID:', departmentData.id);
         await fetchEmployeesInDepartment(departmentData.id, token);
-
-        console.log('Fetching leave requests...');
         const leaveResponse = await fetch('http://localhost:8081/api/leaves/pending', {
           headers: { 'Authorization': `Bearer ${token}` },
         });
@@ -125,10 +113,8 @@ export default function AssistantDirectorDash() {
           throw new Error(`Failed to fetch leave requests: ${leaveResponse.status}`);
         }
         const leaveData = await leaveResponse.json();
-        console.log('Leave requests:', leaveData);
         setLeaveRequests(leaveData);
 
-        console.log('Fetching leave stats...');
         const statsResponse = await fetch('http://localhost:8081/api/leaves/stats', {
           headers: { 'Authorization': `Bearer ${token}` },
         });
@@ -136,10 +122,8 @@ export default function AssistantDirectorDash() {
           throw new Error(`Failed to fetch leave stats: ${statsResponse.status}`);
         }
         const statsData = await statsResponse.json();
-        console.log('Leave stats:', statsData);
         setLeaveStats(statsData);
 
-        console.log('Fetching department metrics...');
         const dashboardResponse = await fetch(`http://localhost:8081/api/hr/department-metrics/${departmentData.id}`, {
           headers: { 'Authorization': `Bearer ${token}` },
         });
@@ -151,7 +135,6 @@ export default function AssistantDirectorDash() {
           throw new Error(`Failed to fetch department metrics: ${dashboardResponse.status}`);
         }
         const data = await dashboardResponse.json();
-        console.log('Department metrics:', data);
         setOverallData({
           totalEmployees: data.totalEmployees || 0,
           onLeaveToday: data.onLeaveToday || 0,
@@ -178,13 +161,11 @@ export default function AssistantDirectorDash() {
 
   const fetchEmployeesInDepartment = async (deptId, token) => {
     if (!deptId) {
-      console.log('No department ID provided for employee fetch');
       return;
     }
     try {
       setIsLoading(true);
       setError(null);
-      console.log('Fetching employees for deptId:', deptId);
       const response = await fetch(`http://localhost:8081/api/hr/departments/${deptId}/employees`, {
         method: 'GET',
         headers: {
@@ -202,7 +183,6 @@ export default function AssistantDirectorDash() {
       }
 
       const data = await response.json();
-      console.log('Employees data:', data);
       const formattedEmployees = data.map(employee => {
         const getDatesInRange = (startDate, endDate) => {
           const dates = [];
@@ -437,7 +417,6 @@ export default function AssistantDirectorDash() {
   };
 
   const handleEmployeeClick = (employee) => {
-    console.log('Selected employee:', employee);
     setSelectedEmployee(employee);
     setActiveView('employee-view');
   };
@@ -827,7 +806,6 @@ export default function AssistantDirectorDash() {
   };
 
   const renderMainContent = () => {
-    console.log('Rendering main content, activeView:', activeView, 'isLoading:', isLoading, 'error:', error);
     if (isLoading) {
       return (
         <div className="flex justify-center items-center h-64">

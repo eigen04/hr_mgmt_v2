@@ -47,7 +47,6 @@ export default function Login() {
             });
 
             const data = await response.json();
-            console.log('Login response:', data); // Debug log to verify response
 
             if (response.ok) {
                 // Store auth data in localStorage
@@ -66,7 +65,6 @@ export default function Login() {
                         setError('No role provided by server');
                         return;
                     }
-                    console.log('Navigating with role:', data.role); // Debug log before navigation
                     switch (data.role.toUpperCase()) {
                         case 'HR':
                             navigate('/hr-dashboard', { replace: true });

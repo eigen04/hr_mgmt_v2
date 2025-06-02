@@ -695,7 +695,6 @@ export default function EmployeeDashboard() {
                                         <th className="text-left py-3 px-4 font-medium text-gray-700">Status</th>
                                         <th className="text-left py-3 px-4 font-medium text-gray-700">Applied On</th>
                                         <th className="text-left py-3 px-4 font-medium text-gray-700">Remaining</th>
-                                        <th className="text-left py-3 px-4 font-medium text-gray-700">Half-Day</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -718,7 +717,6 @@ export default function EmployeeDashboard() {
                                             </td>
                                             <td className="py-3 px-4">{formatDate(application.appliedOn)}</td>
                                             <td className="py-3 px-4">{(application.remainingLeaves != null ? application.remainingLeaves : 0).toFixed(1)}</td>
-                                            <td className="py-3 px-4">{application.isHalfDay ? 'Yes' : 'No'}</td>
                                         </tr>
                                     ))}
                                 </tbody>

@@ -80,7 +80,6 @@ export default function HRDashboard() {
         }
 
         const data = await response.json();
-        console.log('Department data fetched:', data);
         const formattedData = data
           .filter(dept => dept.id !== undefined && dept.id !== null)
           .map(dept => ({
@@ -118,7 +117,6 @@ export default function HRDashboard() {
         }
 
         const data = await response.json();
-        console.log('Dashboard metrics fetched:', data);
         setOverallData({
           totalEmployees: data.totalEmployees || 0,
           onLeaveToday: data.onLeaveToday || 0,
@@ -156,7 +154,6 @@ export default function HRDashboard() {
     try {
       setIsLoading(true);
       setError(null);
-      console.log(`Fetching employees for department ID: ${deptId}`);
       const response = await fetch(`http://localhost:8081/api/hr/departments/${deptId}/employees`, {
         method: 'GET',
         headers: {
@@ -171,7 +168,6 @@ export default function HRDashboard() {
       }
 
       const data = await response.json();
-      console.log('Employees fetched:', data);
       const formattedEmployees = data.map(employee => {
         const getDatesInRange = (startDate, endDate) => {
           const dates = [];
@@ -367,7 +363,6 @@ export default function HRDashboard() {
       setError('Invalid department selected.');
       return;
     }
-    console.log('Department clicked, ID:', deptId);
     setSelectedDepartment(deptId);
     setSelectedEmployee(null);
     setActiveView(null); // Clear activeView to ensure department view renders
@@ -375,7 +370,6 @@ export default function HRDashboard() {
   };
 
   const handleEmployeeClick = (employee) => {
-    console.log('Employee clicked:', employee.name);
     setSelectedEmployee(employee);
   };
 
@@ -386,7 +380,6 @@ export default function HRDashboard() {
   };
 
   const backToOverview = () => {
-    console.log('Returning to department overview');
     setSelectedDepartment(null);
     setSelectedEmployee(null);
     setEmployeesInDepartment([]);
@@ -394,7 +387,6 @@ export default function HRDashboard() {
   };
 
   const backToDepartment = () => {
-    console.log('Returning to department view');
     setSelectedEmployee(null);
   };
 
@@ -711,13 +703,6 @@ export default function HRDashboard() {
   };
 
   const renderMainContent = () => {
-    console.log('Rendering main content, states:', {
-      isLoading,
-      error,
-      selectedEmployee: !!selectedEmployee,
-      selectedDepartment,
-      activeView,
-    });
 
     if (isLoading) {
       return (

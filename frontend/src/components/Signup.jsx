@@ -50,10 +50,8 @@ export default function Signup() {
             'Content-Type': 'application/json',
           },
         });
-        console.log('Departments fetch response status:', response.status, 'URL:', response.url);
         if (response.ok) {
           const data = await response.json();
-          console.log('Departments:', data);
           setDepartments(data);
           if (data.length > 0) {
             setFormData(prev => ({ ...prev, department: data[0].name }));
@@ -84,10 +82,8 @@ export default function Signup() {
             'Content-Type': 'application/json',
           },
         });
-        console.log('Roles fetch response status:', response.status, 'URL:', response.url);
         if (response.ok) {
           const data = await response.json();
-          console.log('Roles:', data);
           const formattedRoles = data.map((role) => ({
             id: role.id,
             name: role.name.toLowerCase() === 'director' ? 'director' :
@@ -95,7 +91,6 @@ export default function Signup() {
                   role.name.toUpperCase(),
             displayName: role.name,
           }));
-          console.log('Formatted Roles:', formattedRoles);
           setRoles(formattedRoles);
           if (formattedRoles.length > 0) {
             setFormData(prev => ({ ...prev, role: formattedRoles[0].name }));
@@ -128,7 +123,6 @@ export default function Signup() {
       if (isReportingPersonRequired() && formData.department && formData.role) {
         try {
           const normalizedDept = normalizeDepartment(formData.department);
-          console.log('Fetching reporting persons with role:', formData.role, 'department:', normalizedDept);
           const response = await fetch(`http://localhost:8081/api/auth/reporting-persons?role=${formData.role}&department=${encodeURIComponent(normalizedDept)}`, {
             method: 'GET',
             headers: {
@@ -136,10 +130,8 @@ export default function Signup() {
             },
           });
           const text = await response.text();
-          console.log('Raw API Response for reporting-persons:', text);
           try {
             const data = JSON.parse(text);
-            console.log('Parsed API Response for reporting-persons:', data);
             if (response.ok) {
               let filteredPersons = data;
               if (formData.role === 'ASSISTANT_DIRECTOR') {
@@ -187,7 +179,6 @@ export default function Signup() {
           setReportingPersons([]);
         }
       } else {
-        console.log('Clearing reporting persons for Admin/HR or Director');
         setReportingPersons([]);
         setFormData(prev => ({ ...prev, reportingToId: null }));
       }
@@ -216,9 +207,6 @@ export default function Signup() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    console.log('Form Data:', formData);
-    console.log('Is Reporting Person Required:', isReportingPersonRequired());
 
     if (formData.password !== formData.confirmPassword) {
       setNotification({ message: 'Passwords do not match!', type: 'error' });
