@@ -5,31 +5,37 @@ import { Calendar, CalendarCheck, FileText, Clock, CheckCircle, XCircle, AlertCi
 export default function EmployeeDashboard() {
     const [userData, setUserData] = useState(null);
     const [leaveBalance, setLeaveBalance] = useState({
-        casualLeave: { total: 12, used: 0, remaining: 12 },
-        earnedLeave: { total: 20, used: 0, remaining: 20 },
+        casualLeave: { total: 12, used: 0, remaining: 0 },
+        earnedLeave: { total: 20, used: 0, remaining: 0, usedFirstHalf: 0, usedSecondHalf: 0, carryover: 0 },
         maternityLeave: { total: 182, used: 0, remaining: 182 },
         paternityLeave: { total: 15, used: 0, remaining: 15 },
-        leaveWithoutPay: { total: 300, used: 0, remaining: 300 }
+        leaveWithoutPay: { total: 300, used: 0, remaining: 300 },
     });
     const [leaveApplications, setLeaveApplications] = useState([]);
     const [leaveFormData, setLeaveFormData] = useState({
         leaveType: 'CL',
         startDate: '',
         endDate: '',
-        reason: ''
+        reason: '',
     });
     const [leaveDays, setLeaveDays] = useState(0);
     const [error, setError] = useState('');
     const [successMessage, setSuccessMessage] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [activeView, setActiveView] = useState('dashboard');
     const navigate = useNavigate();
 
     const today = new Date().toISOString().split('T')[0];
+    const currentMonth = new Date().getMonth() + 1;
+    const currentYear = new Date().getFullYear();
+    const EL_FIRST_HALF = 10;
+    const EL_SECOND_HALF = 10;
 
     useEffect(() => {
         const fetchUserData = async () => {
+            setIsLoading(true);
             try {
                 const token = localStorage.getItem('authToken');
                 if (!token) {
@@ -39,7 +45,7 @@ export default function EmployeeDashboard() {
                 }
 
                 const response = await fetch('http://localhost:8081/api/users/me', {
-                    headers: { 'Authorization': `Bearer ${token}` }
+                    headers: { Authorization: `Bearer ${token}` },
                 });
                 if (response.ok) {
                     const data = await response.json();
@@ -54,29 +60,44 @@ export default function EmployeeDashboard() {
             } catch (err) {
                 console.error('Error fetching user data:', err);
                 setError('An error occurred. Please check your connection and try again.');
+            } finally {
+                setIsLoading(false);
             }
         };
 
         const fetchLeaveData = async () => {
+            setIsLoading(true);
             try {
                 const token = localStorage.getItem('authToken');
                 if (!token) return;
 
                 const balanceResponse = await fetch('http://localhost:8081/api/leaves/balance', {
-                    headers: { 'Authorization': `Bearer ${token}` }
+                    headers: { Authorization: `Bearer ${token}` },
                 });
                 if (balanceResponse.ok) {
                     const balanceData = await balanceResponse.json();
                     const sanitizedBalance = {
-                        casualLeave: balanceData.casualLeave || { total: 12, used: 0, remaining: 12 },
-                        earnedLeave: balanceData.earnedLeave || { total: 20, used: 0, remaining: 20 },
+                        casualLeave: balanceData.casualLeave || { total: 12, used: 0, remaining: 0 },
+                        earnedLeave: balanceData.earnedLeave || {
+                            total: 20,
+                            used: 0,
+                            remaining: 0,
+                            usedFirstHalf: 0,
+                            usedSecondHalf: 0,
+                            carryover: 0,
+                        },
                         maternityLeave: balanceData.maternityLeave || { total: 182, used: 0, remaining: 182 },
                         paternityLeave: balanceData.paternityLeave || { total: 15, used: 0, remaining: 15 },
-                        leaveWithoutPay: balanceData.leaveWithoutPay || { total: 300, used: 0, remaining: 300 }
+                        leaveWithoutPay: balanceData.leaveWithoutPay || { total: 300, used: 0, remaining: 300 },
                     };
                     Object.keys(sanitizedBalance).forEach((key) => {
-                        sanitizedBalance[key].used = Number(sanitizedBalance[key].used.toFixed(1));
-                        sanitizedBalance[key].remaining = Number(sanitizedBalance[key].remaining.toFixed(1));
+                        sanitizedBalance[key].used = Number((sanitizedBalance[key].used || 0).toFixed(1));
+                        sanitizedBalance[key].remaining = Number((sanitizedBalance[key].remaining || 0).toFixed(1));
+                        if (key === 'earnedLeave') {
+                            sanitizedBalance[key].usedFirstHalf = Number((sanitizedBalance[key].usedFirstHalf || 0).toFixed(1));
+                            sanitizedBalance[key].usedSecondHalf = Number((sanitizedBalance[key].usedSecondHalf || 0).toFixed(1));
+                            sanitizedBalance[key].carryover = Number((sanitizedBalance[key].carryover || 0).toFixed(1));
+                        }
                     });
                     setLeaveBalance(sanitizedBalance);
                 } else {
@@ -84,7 +105,7 @@ export default function EmployeeDashboard() {
                 }
 
                 const applicationsResponse = await fetch('http://localhost:8081/api/leaves', {
-                    headers: { 'Authorization': `Bearer ${token}` }
+                    headers: { Authorization: `Bearer ${token}` },
                 });
                 if (applicationsResponse.ok) {
                     const applicationsData = await applicationsResponse.json();
@@ -95,12 +116,21 @@ export default function EmployeeDashboard() {
             } catch (err) {
                 console.error('Error fetching leave data:', err);
                 setError('An error occurred while fetching leave data.');
+            } finally {
+                setIsLoading(false);
             }
         };
 
         fetchUserData();
         fetchLeaveData();
     }, [navigate]);
+
+    useEffect(() => {
+        if (successMessage) {
+            const timer = setTimeout(() => setSuccessMessage(''), 5000);
+            return () => clearTimeout(timer);
+        }
+    }, [successMessage]);
 
     const handleLogout = () => {
         localStorage.removeItem('authToken');
@@ -112,11 +142,11 @@ export default function EmployeeDashboard() {
         const day = new Date(date);
         if (isNaN(day.getTime())) return false;
         const dayOfWeek = day.getDay();
-        if (dayOfWeek === 0) return true;
+        if (dayOfWeek === 0) return true; // Sunday
         if (dayOfWeek === 6) {
             const dayOfMonth = day.getDate();
             const weekOfMonth = Math.floor((dayOfMonth - 1) / 7) + 1;
-            return weekOfMonth === 2 || weekOfMonth === 4;
+            return weekOfMonth === 2 || weekOfMonth === 4; // Second or fourth Saturday
         }
         return false;
     };
@@ -163,7 +193,9 @@ export default function EmployeeDashboard() {
         const start = new Date(startDate);
         if (isNaN(start.getTime())) return false;
         const newStart = start;
-        const newEnd = (leaveType === 'HALF_DAY_CL' || leaveType === 'HALF_DAY_EL' || leaveType === 'HALF_DAY_LWP') ? new Date(startDate) : new Date(endDate);
+        const newEnd = (leaveType === 'HALF_DAY_CL' || leaveType === 'HALF_DAY_EL' || leaveType === 'HALF_DAY_LWP')
+            ? new Date(startDate)
+            : new Date(endDate);
         if (isNaN(newEnd.getTime())) return false;
 
         return leaveApplications.some((application) => {
@@ -175,6 +207,17 @@ export default function EmployeeDashboard() {
             if (isNaN(existingStart.getTime()) || isNaN(existingEnd.getTime())) return false;
             return existingStart <= newEnd && existingEnd >= newStart;
         });
+    };
+
+    const calculateAvailableClForMonth = (applicationMonth) => {
+        // Accrue 1 CL per month from January to the application month
+        const totalClAccrued = Math.min(12, applicationMonth); // Cap at 12 CLs
+        // Calculate total used CL (approved + pending) for the year
+        const totalUsedCl = leaveApplications
+            .filter(app => (app.leaveType === 'CL' || app.leaveType === 'HALF_DAY_CL') &&
+                (app.status === 'APPROVED' || app.status === 'PENDING'))
+            .reduce((total, app) => total + calculateLeaveDays(app.startDate, app.endDate, app.leaveType), 0);
+        return Math.max(0, totalClAccrued - totalUsedCl);
     };
 
     useEffect(() => {
@@ -199,6 +242,7 @@ export default function EmployeeDashboard() {
         setError('');
         setSuccessMessage('');
 
+        // Basic validations
         if (leaveFormData.startDate && leaveFormData.startDate < today) {
             setError('Start date cannot be in the past');
             setIsSubmitting(false);
@@ -211,38 +255,126 @@ export default function EmployeeDashboard() {
             return;
         }
 
-        if (leaveFormData.leaveType !== 'HALF_DAY_CL' && leaveFormData.leaveType !== 'HALF_DAY_EL' && leaveFormData.leaveType !== 'HALF_DAY_LWP' && leaveFormData.leaveType !== 'ML' && leaveFormData.leaveType !== 'PL' && !leaveFormData.endDate) {
+        if (
+            leaveFormData.leaveType !== 'HALF_DAY_CL' &&
+            leaveFormData.leaveType !== 'HALF_DAY_EL' &&
+            leaveFormData.leaveType !== 'HALF_DAY_LWP' &&
+            leaveFormData.leaveType !== 'ML' &&
+            leaveFormData.leaveType !== 'PL' &&
+            !leaveFormData.endDate
+        ) {
             setError('Please provide an end date');
             setIsSubmitting(false);
             return;
         }
 
-        if (leaveFormData.endDate && new Date(leaveFormData.endDate) < new Date(leaveFormData.startDate)) {
+        if (
+            leaveFormData.endDate &&
+            new Date(leaveFormData.endDate) < new Date(leaveFormData.startDate)
+        ) {
             setError('End date cannot be earlier than start date');
             setIsSubmitting(false);
             return;
         }
 
-        if ((leaveFormData.leaveType === 'HALF_DAY_CL' || leaveFormData.leaveType === 'HALF_DAY_EL' || leaveFormData.leaveType === 'HALF_DAY_LWP') && isNonWorkingDay(leaveFormData.startDate)) {
-            setError('Half-day leave cannot be applied on a non-working day (second/fourth Saturday or Sunday)');
+        if (
+            (leaveFormData.leaveType === 'HALF_DAY_CL' ||
+                leaveFormData.leaveType === 'HALF_DAY_EL' ||
+                leaveFormData.leaveType === 'HALF_DAY_LWP') &&
+            isNonWorkingDay(leaveFormData.startDate)
+        ) {
+            setError(
+                'Half-day leave cannot be applied on a non-working day (second/fourth Saturday or Sunday)'
+            );
             setIsSubmitting(false);
             return;
         }
 
-        const leaveDays = calculateLeaveDays(leaveFormData.startDate, leaveFormData.endDate, leaveFormData.leaveType);
+        const leaveDays = calculateLeaveDays(
+            leaveFormData.startDate,
+            leaveFormData.endDate,
+            leaveFormData.leaveType
+        );
         if (leaveDays === 0) {
             setError('No working days selected for leave');
             setIsSubmitting(false);
             return;
         }
 
-        const endDateForOverlap = (leaveFormData.leaveType === 'HALF_DAY_CL' || leaveFormData.leaveType === 'HALF_DAY_EL' || leaveFormData.leaveType === 'HALF_DAY_LWP')
-            ? leaveFormData.startDate
-            : leaveFormData.endDate;
+        const endDateForOverlap =
+            leaveFormData.leaveType === 'HALF_DAY_CL' ||
+            leaveFormData.leaveType === 'HALF_DAY_EL' ||
+            leaveFormData.leaveType === 'HALF_DAY_LWP'
+                ? leaveFormData.startDate
+                : leaveFormData.endDate;
         if (hasOverlappingLeaves(leaveFormData.startDate, endDateForOverlap, leaveFormData.leaveType)) {
-            setError(`You already have a pending or approved leave application overlapping with the dates ${leaveFormData.startDate} to ${endDateForOverlap}.`);
+            setError(
+                `You already have a pending or approved leave application overlapping with the dates ${leaveFormData.startDate} to ${endDateForOverlap}.`
+            );
             setIsSubmitting(false);
             return;
+        }
+
+        // CL-specific validations
+        if (leaveFormData.leaveType === 'CL' || leaveFormData.leaveType === 'HALF_DAY_CL') {
+            const startDate = new Date(leaveFormData.startDate);
+            const applicationMonth = startDate.getMonth() + 1;
+            const applicationYear = startDate.getFullYear();
+
+            if (applicationYear > currentYear) {
+                setError('Advance CL application is only allowed within the current year');
+                setIsSubmitting(false);
+                return;
+            }
+
+            const availableClForMonth = calculateAvailableClForMonth(applicationMonth);
+            if (availableClForMonth < leaveDays) {
+                setError(
+                    `Insufficient CL balance for ${startDate.toLocaleString('default', { month: 'long' })}. Requested: ${leaveDays.toFixed(1)}, Available: ${availableClForMonth.toFixed(1)}`
+                );
+                setIsSubmitting(false);
+                return;
+            }
+        }
+
+        // Enhanced EL validation
+        if (leaveFormData.leaveType === 'EL' || leaveFormData.leaveType === 'HALF_DAY_EL') {
+            const startDate = new Date(leaveFormData.startDate);
+            const applicationMonth = startDate.getMonth() + 1;
+            const currentMonth = new Date().getMonth() + 1;
+            const totalEligible = EL_FIRST_HALF + EL_SECOND_HALF;
+            const totalUsed = leaveBalance.earnedLeave.usedFirstHalf + leaveBalance.earnedLeave.usedSecondHalf;
+
+            if (applicationMonth <= 6 && currentMonth <= 6) {
+                const firstHalfAvailable = EL_FIRST_HALF - leaveBalance.earnedLeave.usedSecondHalf;
+                if (leaveBalance.earnedLeave.usedFirstHalf + leaveDays > firstHalfAvailable) {
+                    setError(`Cannot apply more than ${firstHalfAvailable.toFixed(1)} EL days in the first half`);
+                    setIsSubmitting(false);
+                    return;
+                }
+            } else if (applicationMonth > 6 && currentMonth <= 6) {
+                if (totalUsed + leaveDays > totalEligible) {
+                    setError(`Cannot apply more than ${(totalEligible - totalUsed).toFixed(1)} EL days in advance for the second half`);
+                    setIsSubmitting(false);
+                    return;
+                }
+            } else if (applicationMonth > 6 && currentMonth > 6) {
+                const secondHalfEligible = EL_SECOND_HALF + leaveBalance.earnedLeave.carryover;
+                if (leaveBalance.earnedLeave.usedSecondHalf + leaveDays > secondHalfEligible) {
+                    setError(`Cannot apply more than ${secondHalfEligible.toFixed(1)} EL days in the second half`);
+                    setIsSubmitting(false);
+                    return;
+                }
+                if (totalUsed + leaveDays > totalEligible) {
+                    setError(`Total EL usage cannot exceed ${totalEligible.toFixed(1)} days annually`);
+                    setIsSubmitting(false);
+                    return;
+                }
+            } else if (applicationMonth <= 6 && currentMonth > 6) {
+                setError('Cannot apply EL for the first half (Jan-Jun) when current month is in the second half (Jul-Dec)');
+                setIsSubmitting(false);
+                return;
+            }
         }
 
         try {
@@ -263,69 +395,132 @@ export default function EmployeeDashboard() {
                 HALF_DAY_CL: 'casualLeave',
                 HALF_DAY_EL: 'earnedLeave',
                 LWP: 'leaveWithoutPay',
-                HALF_DAY_LWP: 'leaveWithoutPay'
+                HALF_DAY_LWP: 'leaveWithoutPay',
             };
 
-            const leaveKey = leaveTypeMap[leaveFormData.leaveType];
-            const remainingLeaves = leaveBalance[leaveKey]?.remaining || 0;
-
-            if (remainingLeaves < leaveDays) {
-                setError(`You don’t have enough ${leaveKey.replace(/([A-Z])/g, ' $1').toLowerCase()}. Remaining: ${remainingLeaves}`);
-                setIsSubmitting(false);
-                return;
+            if (!['EL', 'HALF_DAY_EL', 'CL', 'HALF_DAY_CL'].includes(leaveFormData.leaveType)) {
+                const leaveKey = leaveTypeMap[leaveFormData.leaveType];
+                const remainingLeaves = leaveBalance[leaveKey]?.remaining || 0;
+                if (remainingLeaves < leaveDays) {
+                    setError(
+                        `Insufficient ${leaveKey
+                            .replace(/([A-Z])/g, ' $1')
+                            .trim()} balance. Remaining: ${remainingLeaves}`
+                    );
+                    setIsSubmitting(false);
+                    return;
+                }
             }
 
-            const endDate = (leaveFormData.leaveType === 'HALF_DAY_CL' || leaveFormData.leaveType === 'HALF_DAY_EL' || leaveFormData.leaveType === 'HALF_DAY_LWP')
-                ? leaveFormData.startDate
-                : leaveFormData.endDate;
+            const endDate =
+                leaveFormData.leaveType === 'HALF_DAY_CL' ||
+                leaveFormData.leaveType === 'HALF_DAY_EL' ||
+                leaveFormData.leaveType === 'HALF_DAY_LWP'
+                    ? leaveFormData.startDate
+                    : leaveFormData.endDate;
 
             const response = await fetch('http://localhost:8081/api/leaves', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
+                    Authorization: `Bearer ${token}`,
                 },
                 body: JSON.stringify({
                     leaveType: leaveFormData.leaveType,
                     startDate: leaveFormData.startDate,
                     endDate,
                     reason: leaveFormData.reason,
-                    isHalfDay: leaveFormData.leaveType === 'HALF_DAY_CL' || leaveFormData.leaveType === 'HALF_DAY_EL' || leaveFormData.leaveType === 'HALF_DAY_LWP'
-                })
+                    isHalfDay:
+                        leaveFormData.leaveType === 'HALF_DAY_CL' ||
+                        leaveFormData.leaveType === 'HALF_DAY_EL' ||
+                        leaveFormData.leaveType === 'HALF_DAY_LWP',
+                }),
             });
 
             if (response.ok) {
-                setSuccessMessage(`Leave application submitted successfully! Awaiting approval from ${userData?.reportingTo?.fullName || 'your reporting manager'}.`);
+                const startDate = new Date(leaveFormData.startDate);
+                const applicationMonth = startDate.getMonth() + 1;
+                let message = `Leave application submitted successfully! Awaiting approval from ${
+                    userData?.reportingTo?.fullName || 'your reporting manager'
+                }.`;
+                if (
+                    (leaveFormData.leaveType === 'CL' || leaveFormData.leaveType === 'HALF_DAY_CL')
+                ) {
+                    const totalUsedCl = leaveApplications
+                        .filter(app => (app.leaveType === 'CL' || app.leaveType === 'HALF_DAY_CL') &&
+                            (app.status === 'APPROVED' || app.status === 'PENDING'))
+                        .reduce((total, app) => total + calculateLeaveDays(app.startDate, app.endDate, app.leaveType), 0);
+                    const remainingTotal = Math.min(12, applicationMonth) - (totalUsedCl + leaveDays);
+                    message += ` Total CL balance after approval: ${remainingTotal.toFixed(1)} days.`;
+                }
+                if (
+                    (leaveFormData.leaveType === 'EL' || leaveFormData.leaveType === 'HALF_DAY_EL') &&
+                    applicationMonth > 6 &&
+                    currentMonth <= 6
+                ) {
+                    const remainingTotal =
+                        leaveBalance.earnedLeave.total -
+                        leaveBalance.earnedLeave.usedFirstHalf -
+                        leaveBalance.earnedLeave.usedSecondHalf -
+                        leaveDays;
+                    message += ` Total EL balance after approval: ${remainingTotal.toFixed(1)} days.`;
+                }
+
+                setSuccessMessage(message);
                 setLeaveFormData({
                     leaveType: 'CL',
                     startDate: '',
                     endDate: '',
-                    reason: ''
+                    reason: '',
                 });
                 setLeaveDays(0);
                 setActiveView('leave-applications');
 
                 const balanceResponse = await fetch('http://localhost:8081/api/leaves/balance', {
-                    headers: { 'Authorization': `Bearer ${token}` }
+                    headers: { Authorization: `Bearer ${token}` },
                 });
                 if (balanceResponse.ok) {
                     const balanceData = await balanceResponse.json();
                     const sanitizedBalance = {
-                        casualLeave: balanceData.casualLeave || { total: 12, used: 0, remaining: 12 },
-                        earnedLeave: balanceData.earnedLeave || { total: 20, used: 0, remaining: 20 },
+                        casualLeave: balanceData.casualLeave || { total: 12, used: 0, remaining: 0 },
+                        earnedLeave: balanceData.earnedLeave || {
+                            total: 20,
+                            used: 0,
+                            remaining: 0,
+                            usedFirstHalf: 0,
+                            usedSecondHalf: 0,
+                            carryover: 0,
+                        },
                         maternityLeave: balanceData.maternityLeave || { total: 182, used: 0, remaining: 182 },
                         paternityLeave: balanceData.paternityLeave || { total: 15, used: 0, remaining: 15 },
-                        leaveWithoutPay: balanceData.leaveWithoutPay || { total: 300, used: 0, remaining: 300 }
+                        leaveWithoutPay: balanceData.leaveWithoutPay || {
+                            total: 300,
+                            used: 0,
+                            remaining: 300,
+                        },
                     };
                     Object.keys(sanitizedBalance).forEach((key) => {
-                        sanitizedBalance[key].used = Number(sanitizedBalance[key].used.toFixed(1));
-                        sanitizedBalance[key].remaining = Number(sanitizedBalance[key].remaining.toFixed(1));
+                        sanitizedBalance[key].used = Number((sanitizedBalance[key].used || 0).toFixed(1));
+                        sanitizedBalance[key].remaining = Number(
+                            (sanitizedBalance[key].remaining || 0).toFixed(1)
+                        );
+                        if (key === 'earnedLeave') {
+                            sanitizedBalance[key].usedFirstHalf = Number(
+                                (sanitizedBalance[key].usedFirstHalf || 0).toFixed(1)
+                            );
+                            sanitizedBalance[key].usedSecondHalf = Number(
+                                (sanitizedBalance[key].usedSecondHalf || 0).toFixed(1)
+                            );
+                            sanitizedBalance[key].carryover = Number(
+                                (sanitizedBalance[key].carryover || 0).toFixed(1)
+                            );
+                        }
                     });
                     setLeaveBalance(sanitizedBalance);
                 }
 
                 const applicationsResponse = await fetch('http://localhost:8081/api/leaves', {
-                    headers: { 'Authorization': `Bearer ${token}` }
+                    headers: { Authorization: `Bearer ${token}` },
                 });
                 if (applicationsResponse.ok) {
                     const applicationsData = await applicationsResponse.json();
@@ -390,10 +585,25 @@ export default function EmployeeDashboard() {
         HALF_DAY_CL: 'casualLeave',
         HALF_DAY_EL: 'earnedLeave',
         LWP: 'leaveWithoutPay',
-        HALF_DAY_LWP: 'leaveWithoutPay'
+        HALF_DAY_LWP: 'leaveWithoutPay',
     };
 
     const isLeaveTypeAvailable = (leaveType) => {
+        if (leaveType === 'EL' || leaveType === 'HALF_DAY_EL') {
+            const currentMonth = new Date().getMonth() + 1;
+            const totalEligible = EL_FIRST_HALF + EL_SECOND_HALF;
+            const totalUsed = leaveBalance.earnedLeave.usedFirstHalf + leaveBalance.earnedLeave.usedSecondHalf;
+            if (currentMonth <= 6) {
+                return (
+                    leaveBalance.earnedLeave.usedFirstHalf <
+                    EL_FIRST_HALF - leaveBalance.earnedLeave.usedSecondHalf ||
+                    totalUsed < totalEligible
+                );
+            }
+            const secondHalfEligible = EL_SECOND_HALF + leaveBalance.earnedLeave.carryover;
+            return leaveBalance.earnedLeave.usedSecondHalf < secondHalfEligible;
+        }
+
         const leaveKey = leaveTypeMap[leaveType];
         return leaveBalance[leaveKey]?.remaining > 0;
     };
@@ -405,10 +615,7 @@ export default function EmployeeDashboard() {
     const formatDate = (dateString) => {
         const date = new Date(dateString);
         if (isNaN(date.getTime())) return 'N/A';
-        const day = String(date.getDate()).padStart(2, '0');
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const year = date.getFullYear();
-        return `${day}-${month}-${year}`;
+        return date.toISOString().split('T')[0];
     };
 
     const leaveBalanceMetrics = [
@@ -418,9 +625,7 @@ export default function EmployeeDashboard() {
             value: totalRemainingLeaves,
             borderColor: 'border-purple-500',
             icon: <User size={24} className="text-purple-500" />,
-            details: [
-                { label: 'Total Remaining', value: totalRemainingLeaves }
-            ]
+            details: [{ label: 'Total Remaining', value: totalRemainingLeaves }],
         },
         {
             key: 'casual-leave',
@@ -429,9 +634,23 @@ export default function EmployeeDashboard() {
             icon: <CalendarCheck size={24} className="text-blue-500" />,
             details: [
                 { label: 'Total Annual', value: leaveBalance.casualLeave.total },
+                {
+                    label: 'Accrued This Year',
+                    value: leaveFormData.startDate ?
+                        Math.min(12, new Date(leaveFormData.startDate).getMonth() + 1) :
+                        currentMonth,
+                    textColor: 'text-blue-600'
+                },
                 { label: 'Used', value: leaveBalance.casualLeave.used.toFixed(1), textColor: 'text-red-600' },
-                { label: 'Remaining', value: leaveBalance.casualLeave.remaining.toFixed(1), textColor: 'text-green-600' }
-            ]
+                { label: 'Remaining', value: leaveBalance.casualLeave.remaining.toFixed(1), textColor: 'text-green-600' },
+            ],
+            note: leaveApplications.some(app => (app.leaveType === 'CL' || app.leaveType === 'HALF_DAY_CL') &&
+                app.status === 'PENDING' && new Date(app.startDate).getMonth() + 1 > new Date().getMonth() + 1)
+                ? `Pending advance CL applications exist. Total CL after approval: ${(leaveBalance.casualLeave.total - leaveApplications
+                    .filter(app => (app.leaveType === 'CL' || app.leaveType === 'HALF_DAY_CL') &&
+                        (app.status === 'APPROVED' || app.status === 'PENDING'))
+                    .reduce((total, app) => total + calculateLeaveDays(app.startDate, app.endDate, app.leaveType), 0)).toFixed(1)} days.`
+                : null,
         },
         {
             key: 'earned-leave',
@@ -440,32 +659,66 @@ export default function EmployeeDashboard() {
             icon: <Calendar size={24} className="text-green-500" />,
             details: [
                 { label: 'Total Annual', value: leaveBalance.earnedLeave.total },
-                { label: 'Used', value: leaveBalance.earnedLeave.used.toFixed(1), textColor: 'text-red-600' },
-                { label: 'Remaining', value: leaveBalance.earnedLeave.remaining.toFixed(1), textColor: 'text-green-600' }
-            ]
+                {
+                    label: 'Carryover from First Half',
+                    value: leaveBalance.earnedLeave.carryover.toFixed(1),
+                    textColor: 'text-blue-600',
+                },
+                {
+                    label: 'Used in First Half',
+                    value: leaveBalance.earnedLeave.usedFirstHalf.toFixed(1),
+                    textColor: 'text-red-600',
+                },
+                {
+                    label: 'Used in Second Half',
+                    value: leaveBalance.earnedLeave.usedSecondHalf.toFixed(1),
+                    textColor: 'text-red-600',
+                },
+                {
+                    label: 'Remaining',
+                    value: leaveBalance.earnedLeave.remaining.toFixed(1),
+                    textColor: 'text-green-600',
+                },
+            ],
+            note:
+                new Date().getMonth() + 1 <= 6 && leaveBalance.earnedLeave.usedSecondHalf > 0
+                    ? `Pending advance EL: ${leaveBalance.earnedLeave.usedSecondHalf.toFixed(1)} days. Total EL balance after approval: ${(leaveBalance.earnedLeave.total - leaveBalance.earnedLeave.usedFirstHalf - leaveBalance.earnedLeave.usedSecondHalf).toFixed(1)} days.`
+                    : null,
         },
-        ...(userData?.gender?.toUpperCase() === 'FEMALE' ? [{
-            key: 'maternity-leave',
-            title: 'Maternity Leave (ML)',
-            borderColor: 'border-pink-500',
-            icon: <Calendar size={24} className="text-pink-500" />,
-            details: [
-                { label: 'Total', value: leaveBalance.maternityLeave.total },
-                { label: 'Used', value: leaveBalance.maternityLeave.used.toFixed(1), textColor: 'text-red-600' },
-                { label: 'Remaining', value: leaveBalance.maternityLeave.remaining.toFixed(1), textColor: 'text-green-600' }
-            ]
-        }] : []),
-        ...(userData?.gender?.toUpperCase() === 'MALE' ? [{
-            key: 'paternity-leave',
-            title: 'Paternity Leave (PL)',
-            borderColor: 'border-blue-500',
-            icon: <Calendar size={24} className="text-blue-500" />,
-            details: [
-                { label: 'Total', value: leaveBalance.paternityLeave.total },
-                { label: 'Used', value: leaveBalance.paternityLeave.used.toFixed(1), textColor: 'text-red-600' },
-                { label: 'Remaining', value: leaveBalance.paternityLeave.remaining.toFixed(1), textColor: 'text-green-600' }
-            ]
-        }] : []),
+        ...(userData?.gender?.toUpperCase() === 'FEMALE'
+            ? [{
+                key: 'maternity-leave',
+                title: 'Maternity Leave (ML)',
+                borderColor: 'border-pink-500',
+                icon: <Calendar size={24} className="text-pink-500" />,
+                details: [
+                    { label: 'Total', value: leaveBalance.maternityLeave.total },
+                    { label: 'Used', value: leaveBalance.maternityLeave.used.toFixed(1), textColor: 'text-red-600' },
+                    {
+                        label: 'Remaining',
+                        value: leaveBalance.maternityLeave.remaining.toFixed(1),
+                        textColor: 'text-green-600'
+                    },
+                ],
+            }]
+            : []),
+        ...(userData?.gender?.toUpperCase() === 'MALE'
+            ? [{
+                key: 'paternity-leave',
+                title: 'Paternity Leave (PL)',
+                borderColor: 'border-blue-500',
+                icon: <Calendar size={24} className="text-blue-500" />,
+                details: [
+                    { label: 'Total', value: leaveBalance.paternityLeave.total },
+                    { label: 'Used', value: leaveBalance.paternityLeave.used.toFixed(1), textColor: 'text-red-600' },
+                    {
+                        label: 'Remaining',
+                        value: leaveBalance.paternityLeave.remaining.toFixed(1),
+                        textColor: 'text-green-600'
+                    },
+                ],
+            }]
+            : []),
         {
             key: 'leave-without-pay',
             title: 'Leave Without Pay (LWP)',
@@ -474,18 +727,35 @@ export default function EmployeeDashboard() {
             details: [
                 { label: 'Total Annual', value: leaveBalance.leaveWithoutPay.total },
                 { label: 'Used', value: leaveBalance.leaveWithoutPay.used.toFixed(1), textColor: 'text-red-600' },
-                { label: 'Remaining', value: leaveBalance.leaveWithoutPay.remaining.toFixed(1), textColor: 'text-green-600' }
-            ]
-        }
+                {
+                    label: 'Remaining',
+                    value: leaveBalance.leaveWithoutPay.remaining.toFixed(1),
+                    textColor: 'text-green-600'
+                },
+            ],
+        },
     ];
 
     const renderDashboardView = () => {
+        if (isLoading) {
+            return (
+                <div className="flex justify-center items-center h-64">
+                    <svg className="animate-spin h-8 w-8 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none"
+                         viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                    </svg>
+                </div>
+            );
+        }
+
         return (
             <div className="space-y-8">
                 <div className="bg-white rounded-lg shadow-lg p-6">
                     <h2 className="text-xl font-semibold text-gray-900 mb-6">Leave Balance Overview</h2>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {leaveBalanceMetrics.map(metric => (
+                        {leaveBalanceMetrics.map((metric) => (
                             <div
                                 key={metric.key}
                                 className={`bg-white rounded-lg p-5 border-l-4 ${metric.borderColor} shadow-md hover:shadow-lg transition-all duration-200`}
@@ -498,11 +768,15 @@ export default function EmployeeDashboard() {
                                     {metric.details.map((detail, index) => (
                                         <div key={index} className="flex justify-between items-center">
                                             <span className="text-gray-600">{detail.label}</span>
-                                            <span className={`font-bold text-xl ${detail.textColor || 'text-gray-900'}`}>
+                                            <span
+                                                className={`font-bold text-xl ${detail.textColor || 'text-gray-900'}`}>
                                                 {detail.value}
                                             </span>
                                         </div>
                                     ))}
+                                    {metric.note && (
+                                        <p className="text-sm text-gray-600 mt-2">{metric.note}</p>
+                                    )}
                                 </div>
                             </div>
                         ))}
@@ -515,18 +789,52 @@ export default function EmployeeDashboard() {
     const renderApplyLeaveView = () => {
         const isHalfDay = leaveFormData.leaveType === 'HALF_DAY_CL' || leaveFormData.leaveType === 'HALF_DAY_EL' || leaveFormData.leaveType === 'HALF_DAY_LWP';
         const isFixedDuration = leaveFormData.leaveType === 'ML' || leaveFormData.leaveType === 'PL';
+        const currentMonth = new Date().getMonth() + 1;
+        const applicationMonth = leaveFormData.startDate ? new Date(leaveFormData.startDate).getMonth() + 1 : null;
+        const accruedCl = applicationMonth ? Math.min(12, applicationMonth) : currentMonth;
 
         return (
             <div className="space-y-6">
                 <h2 className="text-2xl font-semibold text-gray-900">Apply for Leave</h2>
                 <div className="bg-white rounded-lg shadow-lg p-6">
+                    {currentMonth <= 6 && leaveBalance.earnedLeave.usedSecondHalf > 0 && (leaveFormData.leaveType === 'EL' || leaveFormData.leaveType === 'HALF_DAY_EL') && (
+                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                            <p className="text-sm text-yellow-800 font-medium">
+                                You have a pending advance EL application
+                                for {leaveBalance.earnedLeave.usedSecondHalf.toFixed(1)} days. No EL available for the
+                                first half until processed.
+                            </p>
+                        </div>
+                    )}
+                    {(leaveFormData.leaveType === 'CL' || leaveFormData.leaveType === 'HALF_DAY_CL') && applicationMonth > currentMonth && (
+                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                            <p className="text-sm text-yellow-800 font-medium">
+                                You are applying for an advance CL for {new Date(leaveFormData.startDate).toLocaleString('default', { month: 'long' })}.
+                                Total CL committed: {(leaveApplications
+                                .filter(app => (app.leaveType === 'CL' || app.leaveType === 'HALF_DAY_CL') &&
+                                    (app.status === 'APPROVED' || app.status === 'PENDING'))
+                                .reduce((total, app) => total + calculateLeaveDays(app.startDate, app.endDate, app.leaveType), 0) + leaveDays).toFixed(1)} days.
+                            </p>
+                        </div>
+                    )}
+                    {(leaveFormData.leaveType === 'CL' || leaveFormData.leaveType === 'HALF_DAY_CL') && (
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                            <p className="text-sm text-blue-800 font-medium">
+                                Accrued CL as of {applicationMonth ? new Date(leaveFormData.startDate).toLocaleString('default', { month: 'long' }) : new Date().toLocaleString('default', { month: 'long' })}: {accruedCl.toFixed(1)} days.
+                            </p>
+                        </div>
+                    )}
                     <div className="space-y-4">
                         <div className="grid md:grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Leave Type</label>
                                 <select
                                     value={leaveFormData.leaveType}
-                                    onChange={(e) => setLeaveFormData({ ...leaveFormData, leaveType: e.target.value, endDate: '' })}
+                                    onChange={(e) => setLeaveFormData({
+                                        ...leaveFormData,
+                                        leaveType: e.target.value,
+                                        endDate: ''
+                                    })}
                                     className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                     autoComplete="off"
                                 >
@@ -534,13 +842,13 @@ export default function EmployeeDashboard() {
                                         Casual Leave {isLeaveTypeAvailable('CL') ? '' : '(Unavailable)'}
                                     </option>
                                     <option value="EL" disabled={!isLeaveTypeAvailable('EL')}>
-                                        Earned Leave {isLeaveTypeAvailable('EL') ? '' : '(Unavailable)'}
+                                        Earned Leave
                                     </option>
                                     <option value="HALF_DAY_CL" disabled={!isLeaveTypeAvailable('HALF_DAY_CL')}>
                                         Half-Day CL {isLeaveTypeAvailable('HALF_DAY_CL') ? '' : '(Unavailable)'}
                                     </option>
                                     <option value="HALF_DAY_EL" disabled={!isLeaveTypeAvailable('HALF_DAY_EL')}>
-                                        Half-Day EL {isLeaveTypeAvailable('HALF_DAY_EL') ? '' : '(Unavailable)'}
+                                        Half-Day EL
                                     </option>
                                     {userData?.gender?.toUpperCase() === 'FEMALE' && (
                                         <option value="ML" disabled={!isLeaveTypeAvailable('ML')}>
@@ -559,22 +867,31 @@ export default function EmployeeDashboard() {
                                         Half-Day LWP {isLeaveTypeAvailable('HALF_DAY_LWP') ? '' : '(Unavailable)'}
                                     </option>
                                 </select>
-                                {leaveBalance[leaveTypeMap[leaveFormData.leaveType]]?.remaining <= 0 && (
+                                {leaveBalance[leaveTypeMap[leaveFormData.leaveType]]?.remaining <= 0 && !['EL', 'HALF_DAY_EL', 'CL', 'HALF_DAY_CL'].includes(leaveFormData.leaveType) && (
                                     <div className="text-red-600 text-sm mt-1">
-                                        No remaining {leaveFormData.leaveType} available.
+                                        No remaining {leaveFormData.leaveType.replace(/_/g, ' ').toLowerCase()} available.
                                     </div>
                                 )}
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
                                 <div className="relative">
-                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <div
+                                        className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                         <Calendar size={18} className="text-gray-400" />
                                     </div>
                                     <input
                                         type="date"
                                         value={leaveFormData.startDate}
-                                        onChange={(e) => setLeaveFormData({ ...leaveFormData, startDate: e.target.value })}
+                                        onChange={(e) => {
+                                            const startDate = e.target.value;
+                                            setLeaveFormData({ ...leaveFormData, startDate });
+                                            if (isNonWorkingDay(startDate) && (leaveFormData.leaveType === 'HALF_DAY_CL' || leaveFormData.leaveType === 'HALF_DAY_EL' || leaveFormData.leaveType === 'HALF_DAY_LWP')) {
+                                                setError('Half-day leave cannot be applied on a non-working day (second/fourth Saturday or Sunday)');
+                                            } else {
+                                                setError('');
+                                            }
+                                        }}
                                         min={today}
                                         className={`pl-10 w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${leaveFormData.startDate && leaveFormData.startDate < today ? 'border-red-500 bg-red-50' : ''}`}
                                         autoComplete="off"
@@ -590,13 +907,17 @@ export default function EmployeeDashboard() {
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
                                     <div className="relative">
-                                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                        <div
+                                            className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                             <Calendar size={18} className="text-gray-400" />
                                         </div>
                                         <input
                                             type="date"
                                             value={leaveFormData.endDate}
-                                            onChange={(e) => setLeaveFormData({ ...leaveFormData, endDate: e.target.value })}
+                                            onChange={(e) => setLeaveFormData({
+                                                ...leaveFormData,
+                                                endDate: e.target.value
+                                            })}
                                             min={leaveFormData.startDate || today}
                                             className={`pl-10 w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${leaveFormData.endDate && leaveFormData.startDate && leaveFormData.endDate < leaveFormData.startDate ? 'border-red-500 bg-red-50' : ''}`}
                                             autoComplete="off"
@@ -613,7 +934,8 @@ export default function EmployeeDashboard() {
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
                                     <div className="relative">
-                                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                        <div
+                                            className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                             <Calendar size={18} className="text-gray-400" />
                                         </div>
                                         <input
@@ -637,35 +959,53 @@ export default function EmployeeDashboard() {
                                     rows="3"
                                     className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                     autoComplete="off"
+                                    placeholder="Provide a reason for your leave"
                                 ></textarea>
                             </div>
                         </div>
                         <div className="mb-4">
                             <p className="text-sm text-gray-600">
-                                Total leave days (excluding second/fourth Saturdays and Sundays for CL and LWP): <span className="font-bold">{leaveDays.toFixed(1)}</span>
+                                Total leave days (excluding second/fourth Saturdays and Sundays for CL and LWP):{' '}
+                                <span className="font-bold">{leaveDays.toFixed(1)}</span>
                             </p>
                         </div>
                         <button
                             onClick={handleLeaveSubmit}
                             disabled={
                                 isSubmitting ||
-                                !isLeaveTypeAvailable(leaveFormData.leaveType) ||
                                 !leaveFormData.startDate ||
                                 !leaveFormData.reason ||
-                                ((leaveFormData.leaveType !== 'HALF_DAY_CL' && leaveFormData.leaveType !== 'HALF_DAY_EL' && leaveFormData.leaveType !== 'HALF_DAY_LWP' && leaveFormData.leaveType !== 'ML' && leaveFormData.leaveType !== 'PL') && !leaveFormData.endDate) ||
+                                ((leaveFormData.leaveType !== 'HALF_DAY_CL' &&
+                                        leaveFormData.leaveType !== 'HALF_DAY_EL' &&
+                                        leaveFormData.leaveType !== 'HALF_DAY_LWP' &&
+                                        leaveFormData.leaveType !== 'ML' &&
+                                        leaveFormData.leaveType !== 'PL') &&
+                                    !leaveFormData.endDate) ||
                                 (leaveFormData.startDate && leaveFormData.startDate < today) ||
                                 (leaveFormData.endDate && leaveFormData.startDate && leaveFormData.endDate < leaveFormData.startDate && leaveFormData.leaveType !== 'ML' && leaveFormData.leaveType !== 'PL') ||
                                 leaveDays === 0
                             }
                             className={`w-full flex justify-center items-center py-2.5 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white ${
-                                isSubmitting || !isLeaveTypeAvailable(leaveFormData.leaveType) || !leaveFormData.startDate || !leaveFormData.reason || leaveDays === 0 ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-700 hover:bg-blue-800'
+                                isSubmitting ||
+                                !leaveFormData.startDate ||
+                                !leaveFormData.reason ||
+                                leaveDays === 0
+                                    ? 'bg-gray-400 cursor-not-allowed'
+                                    : 'bg-blue-700 hover:bg-blue-800'
                             } focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors duration-200`}
                         >
                             {isSubmitting ? (
                                 <span className="flex items-center">
-                                    <svg className="animate-spin h-5 w-5 mr-2 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                                    <svg
+                                        className="animate-spin h-5 w-5 mr-2 text-white"
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                                strokeWidth="4"></circle>
+                                        <path className="opacity-75" fill="currentColor"
+                                              d="M4 12a8 8 0 018-8v8H4z"></path>
                                     </svg>
                                     Submitting...
                                 </span>
@@ -680,6 +1020,19 @@ export default function EmployeeDashboard() {
     };
 
     const renderLeaveApplicationsView = () => {
+        if (isLoading) {
+            return (
+                <div className="flex justify-center items-center h-64">
+                    <svg className="animate-spin h-8 w-8 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none"
+                         viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                    </svg>
+                </div>
+            );
+        }
+
         return (
             <div className="space-y-6">
                 <h2 className="text-2xl font-semibold text-gray-900">My Leave Applications</h2>
@@ -688,43 +1041,48 @@ export default function EmployeeDashboard() {
                         <div className="overflow-x-auto">
                             <table className="w-full">
                                 <thead>
-                                    <tr className="border-b">
-                                        <th className="text-left py-3 px-4 font-medium text-gray-700">Type</th>
-                                        <th className="text-left py-3 px-4 font-medium text-gray-700">Start Date</th>
-                                        <th className="text-left py-3 px-4 font-medium text-gray-700">End Date</th>
-                                        <th className="text-left py-3 px-4 font-medium text-gray-700">Status</th>
-                                        <th className="text-left py-3 px-4 font-medium text-gray-700">Applied On</th>
-                                        <th className="text-left py-3 px-4 font-medium text-gray-700">Remaining</th>
-                                    </tr>
+                                <tr className="border-b">
+                                    <th className="text-left py-3 px-4 font-medium text-gray-700">Type</th>
+                                    <th className="text-left py-3 px-4 font-medium text-gray-700">Start Date</th>
+                                    <th className="text-left py-3 px-4 font-medium text-gray-700">End Date</th>
+                                    <th className="text-left py-3 px-4 font-medium text-gray-700">Status</th>
+                                    <th className="text-left py-3 px-4 font-medium text-gray-700">Applied On</th>
+                                    <th className="text-left py-3 px-4 font-medium text-gray-700">Remaining</th>
+                                    <th className="text-left py-3 px-4 font-medium text-gray-700">Reason</th>
+                                </tr>
                                 </thead>
                                 <tbody>
-                                    {leaveApplications.map((application) => (
-                                        <tr key={application.id} className="border-b hover:bg-gray-50">
-                                            <td className="py-3 px-4">{application.leaveType || 'N/A'}</td>
-                                            <td className="py-3 px-4">{formatDate(application.startDate)}</td>
-                                            <td className="py-3 px-4">
-                                                {(application.leaveType === 'HALF_DAY_CL' || application.leaveType === 'HALF_DAY_EL' || application.leaveType === 'HALF_DAY_LWP')
-                                                    ? `${formatDate(application.startDate)} (Half-Day)`
-                                                    : application.endDate
+                                {leaveApplications.map((application) => (
+                                    <tr key={application.id} className="border-b hover:bg-gray-50">
+                                        <td className="py-3 px-4">{application.leaveType || 'N/A'}</td>
+                                        <td className="py-3 px-4">{formatDate(application.startDate)}</td>
+                                        <td className="py-3 px-4">
+                                            {(application.leaveType === 'HALF_DAY_CL' ||
+                                                application.leaveType === 'HALF_DAY_EL' ||
+                                                application.leaveType === 'HALF_DAY_LWP')
+                                                ? `${formatDate(application.startDate)} (Half-Day)`
+                                                : application.endDate
                                                     ? formatDate(application.endDate)
                                                     : 'N/A'}
-                                            </td>
-                                            <td className="py-3 px-4">
-                                                <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(application.status)}`}>
-                                                    {getStatusIcon(application.status)}
-                                                    <span className="ml-1">{application.status || 'Unknown'}</span>
-                                                </span>
-                                            </td>
-                                            <td className="py-3 px-4">{formatDate(application.appliedOn)}</td>
-                                            <td className="py-3 px-4">{(application.remainingLeaves != null ? application.remainingLeaves : 0).toFixed(1)}</td>
-                                        </tr>
-                                    ))}
+                                        </td>
+                                        <td className="py-3 px-4">
+                                            <span
+                                                className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(application.status)}`}>
+                                                {getStatusIcon(application.status)}
+                                                <span className="ml-1">{application.status || 'Unknown'}</span>
+                                            </span>
+                                        </td>
+                                        <td className="py-3 px-4">{formatDate(application.appliedOn)}</td>
+                                        <td className="py-3 px-4">{(application.remainingLeaves != null ? application.remainingLeaves : 0).toFixed(1)}</td>
+                                        <td className="py-3 px-4">{application.reason || 'N/A'}</td>
+                                    </tr>
+                                ))}
                                 </tbody>
                             </table>
                         </div>
                     ) : (
                         <div className="text-center py-6">
-                            <p className="text-gray-600">No leave applications found</p>
+                            <p className="text-gray-600">No leave applications found.</p>
                         </div>
                     )}
                 </div>
@@ -755,41 +1113,35 @@ export default function EmployeeDashboard() {
 
     return (
         <div className="min-h-screen bg-gray-50 flex font-sans">
-            {/* Sidebar */}
-            <div className={`fixed inset-y-0 left-0 z-30 w-64 bg-blue-900 text-white transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 transition-transform duration-300 ease-in-out shadow-lg`}>
+            <div
+                className={`fixed inset-y-0 left-0 z-30 w-64 bg-blue-900 text-white transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 transition-transform duration-300 ease-in-out shadow-lg`}>
                 <div className="flex items-center justify-between p-4 border-b border-blue-800">
                     <div className="flex items-center space-x-3">
                         <img src="/Images/bisag_logo.png" alt="BISAG-N Logo" className="h-10 w-10 rounded-full" />
                         <span className="text-xl font-semibold">BISAG-N HRMS</span>
                     </div>
                     <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden">
-                        <X size={24} />
+                        <X size="24" />
                     </button>
                 </div>
                 <nav className="p-4 space-y-2">
                     <button
                         onClick={() => setActiveView('dashboard')}
-                        className={`flex items-center w-full p-3 text-left rounded-lg transition duration-200 ${
-                            activeView === 'dashboard' ? 'bg-blue-800' : 'hover:bg-blue-800'
-                        }`}
+                        className={`flex items-center w-full p-3 text-left rounded-lg transition duration-200 ${activeView === 'dashboard' ? 'bg-blue-800' : 'hover:bg-blue-800'}`}
                     >
                         <User size={20} className="mr-3" />
                         Dashboard
                     </button>
                     <button
                         onClick={() => setActiveView('apply-leave')}
-                        className={`flex items-center w-full p-3 text-left rounded-lg transition duration-200 ${
-                            activeView === 'apply-leave' ? 'bg-blue-800' : 'hover:bg-blue-800'
-                        }`}
+                        className={`flex items-center w-full p-3 text-left rounded-lg transition duration-200 ${activeView === 'apply-leave' ? 'bg-blue-800' : 'hover:bg-blue-800'}`}
                     >
                         <FileText size={20} className="mr-3" />
                         Apply for Leave
                     </button>
                     <button
                         onClick={() => setActiveView('leave-applications')}
-                        className={`flex items-center w-full p-3 text-left rounded-lg transition duration-200 ${
-                            activeView === 'leave-applications' ? 'bg-blue-800' : 'hover:bg-blue-800'
-                        }`}
+                        className={`flex items-center w-full p-3 text-left rounded-lg transition duration-200 ${activeView === 'leave-applications' ? 'bg-blue-800' : 'hover:bg-blue-800'}`}
                     >
                         <CalendarCheck size={20} className="mr-3" />
                         Leave Applications
@@ -804,7 +1156,6 @@ export default function EmployeeDashboard() {
                 </nav>
             </div>
 
-            {/* Main Content */}
             <div className="flex-1 flex flex-col lg:ml-64">
                 <header className="bg-white shadow-lg p-4 flex items-center justify-between">
                     <div className="flex items-center">
@@ -830,9 +1181,7 @@ export default function EmployeeDashboard() {
                             <p className="text-sm text-green-800 font-medium">{successMessage}</p>
                         </div>
                     )}
-                    <div className="space-y-8">
-                        {renderMainContent()}
-                    </div>
+                    <div className="space-y-8">{renderMainContent()}</div>
                 </main>
 
                 <footer className="bg-blue-900 text-white py-4 text-center">

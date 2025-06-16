@@ -39,7 +39,7 @@ public class UserService implements UserDetailsService {
     private JwtUtil jwtUtil;
 
     @Autowired
-    private BCryptPasswordEncoder passwordEncoder; // Add this dependency
+    private BCryptPasswordEncoder passwordEncoder;
 
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
@@ -149,9 +149,7 @@ public class UserService implements UserDetailsService {
         return dtos;
     }
 
-    // New signup method
     public User signup(UserDTO userDTO) {
-        // Validate username and email uniqueness
         if (userRepository.existsByUsername(userDTO.getUsername())) {
             throw new IllegalArgumentException("Username already taken");
         }
@@ -159,7 +157,6 @@ public class UserService implements UserDetailsService {
             throw new IllegalArgumentException("Email already registered");
         }
 
-        // Validate department for non-Director roles
         if (!"director".equalsIgnoreCase(userDTO.getRole())) {
             if (userDTO.getDepartment() == null || userDTO.getDepartment().isBlank()) {
                 throw new IllegalArgumentException("Department is required for non-Director roles");
@@ -170,7 +167,6 @@ public class UserService implements UserDetailsService {
             }
         }
 
-        // Look up the department by name for non-Director roles
         Department departmentEntity = null;
         if (!"director".equalsIgnoreCase(userDTO.getRole())) {
             String normalizedDept = normalizeDepartment(userDTO.getDepartment());
@@ -178,25 +174,24 @@ public class UserService implements UserDetailsService {
                     .orElseThrow(() -> new IllegalArgumentException("Department not found: " + normalizedDept));
         }
 
-        // Initialize leave balances based on role and gender
         LeaveBalance leaveBalance = new LeaveBalance();
         leaveBalance.setCasualLeaveUsed(0.0);
         leaveBalance.setCasualLeaveRemaining(userDTO.getRole().equalsIgnoreCase("ASSISTANT_DIRECTOR") ? 12.0 : 10.0);
-        leaveBalance.setEarnedLeaveUsed(0.0);
-        leaveBalance.setEarnedLeaveRemaining(userDTO.getRole().equalsIgnoreCase("ASSISTANT_DIRECTOR") ? 20.0 : 15.0);
+        leaveBalance.setEarnedLeaveUsedFirstHalf(0.0);
+        leaveBalance.setEarnedLeaveUsedSecondHalf(0.0);
+        // Remove earnedLeaveRemaining initialization; defer to LeaveService.initializeLeaveBalance
         leaveBalance.setMaternityLeaveUsed(0.0);
         leaveBalance.setMaternityLeaveRemaining(userDTO.getGender().equalsIgnoreCase("Female") ? 182.0 : 0.0);
         leaveBalance.setPaternityLeaveUsed(0.0);
         leaveBalance.setPaternityLeaveRemaining(userDTO.getGender().equalsIgnoreCase("Male") ? 15.0 : 0.0);
 
-        // Create the User entity
         User user = new User();
         user.setFullName(userDTO.getFullName());
         user.setUsername(userDTO.getUsername());
         user.setPassword(passwordEncoder.encode(userDTO.getPassword()));
         user.setEmail(userDTO.getEmail());
-        user.setDepartment(userDTO.getDepartment()); // Set the department name temporarily
-        user.setDepartmentEntity(departmentEntity); // This sets the department_id
+        user.setDepartment(userDTO.getDepartment());
+        user.setDepartmentEntity(departmentEntity);
         user.setRole(userDTO.getRole());
         user.setGender(userDTO.getGender());
         user.setLeaveBalance(leaveBalance);
@@ -204,7 +199,6 @@ public class UserService implements UserDetailsService {
         user.setLeaveWithoutPayment(0.0);
         user.setHalfDayLwp(0.0);
 
-        // Set reportingTo if provided
         if (userDTO.getReportingToId() != null) {
             User reportingTo = userRepository.findById(userDTO.getReportingToId())
                     .orElseThrow(() -> new IllegalArgumentException("Reporting person not found with ID: " + userDTO.getReportingToId()));

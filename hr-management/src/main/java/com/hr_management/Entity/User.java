@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonBackReference;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import java.util.List;
+import java.time.LocalDate;
 
 @Entity
 @Table(name = "users")
@@ -28,6 +29,9 @@ public class User {
     @Column
     private String department; // This will store the department name temporarily
 
+
+@Column(name = "join_date", nullable = false, updatable = false)
+private LocalDate joinDate = LocalDate.now();
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "department_id") // Maps to the department_id column in the users table
     private Department departmentEntity; // Reference to the Department entity
@@ -128,7 +132,13 @@ public class User {
     public String getGender() {
         return gender;
     }
+    public LocalDate getJoinDate() {
+        return joinDate;
+    }
 
+    public void setJoinDate(LocalDate joinDate) {
+        this.joinDate = joinDate;
+    }
     public void setGender(String gender) {
         this.gender = gender;
     }

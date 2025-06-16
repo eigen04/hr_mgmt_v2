@@ -11,9 +11,9 @@ public class LeaveApplicationDTO {
     private String reason;
     private String status;
     private LocalDate appliedOn;
-    private int remainingLeaves;
+    private double remainingLeaves; // Changed from int to double
     private boolean isHalfDay;
-    private String department; // Add this field
+    private String department;
 
     // Getters and Setters
     public Long getId() { return id; }
@@ -32,11 +32,10 @@ public class LeaveApplicationDTO {
     public void setStatus(String status) { this.status = status; }
     public LocalDate getAppliedOn() { return appliedOn; }
     public void setAppliedOn(LocalDate appliedOn) { this.appliedOn = appliedOn; }
-    public int getRemainingLeaves() { return remainingLeaves; }
-    public void setRemainingLeaves(int remainingLeaves) { this.remainingLeaves = remainingLeaves; }
+    public double getRemainingLeaves() { return remainingLeaves; } // Changed to double
+    public void setRemainingLeaves(double remainingLeaves) { this.remainingLeaves = remainingLeaves; } // Changed to double
     public boolean isHalfDay() { return isHalfDay; }
     public void setHalfDay(boolean halfDay) { this.isHalfDay = halfDay; }
-    // Add getter and setter for department
     public String getDepartment() { return department; }
     public void setDepartment(String department) { this.department = department; }
 }
