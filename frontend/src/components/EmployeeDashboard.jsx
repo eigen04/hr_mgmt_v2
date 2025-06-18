@@ -5,7 +5,7 @@ import { Calendar, CalendarCheck, FileText, Clock, CheckCircle, XCircle, AlertCi
 export default function EmployeeDashboard() {
     const [userData, setUserData] = useState(null);
     const [leaveBalance, setLeaveBalance] = useState({
-        casualLeave: { total: 12, used: 0, remaining: 0 },
+        casualLeave: { total: 12, used: 0, remaining: 0 }, // Remaining will be set after fetching user data
         earnedLeave: { total: 20, used: 0, remaining: 0, usedFirstHalf: 0, usedSecondHalf: 0, carryover: 0 },
         maternityLeave: { total: 182, used: 0, remaining: 182 },
         paternityLeave: { total: 15, used: 0, remaining: 15 },
@@ -49,6 +49,22 @@ export default function EmployeeDashboard() {
                 });
                 if (response.ok) {
                     const data = await response.json();
+                    setUserData(data);
+
+                    // Calculate accrued CL based on join date
+                    const joinDate = new Date(data.joinDate);
+                    const joinYear = joinDate.getFullYear();
+                    const joinMonth = joinDate.getMonth() + 1;
+                    const currentMonth = new Date().getMonth() + 1;
+                    const currentYear = new Date().getFullYear();
+                    let monthsAccrued = 0;
+
+                    if (currentYear === joinYear) {
+                        monthsAccrued = Math.max(0, currentMonth - joinMonth + 1);
+                    } else if (currentYear > joinYear) {
+                        monthsAccrued = currentMonth;
+                    }
+                    data.accruedCl = Math.min(12, monthsAccrued); // Cap at 12 CLs annually
                     setUserData(data);
                 } else if (response.status === 401) {
                     setError('Session expired. Please log in again.');
@@ -210,13 +226,25 @@ export default function EmployeeDashboard() {
     };
 
     const calculateAvailableClForMonth = (applicationMonth) => {
-        // Accrue 1 CL per month from January to the application month
-        const totalClAccrued = Math.min(12, applicationMonth); // Cap at 12 CLs
+        const joinDate = new Date(userData.joinDate);
+        const joinYear = joinDate.getFullYear();
+        const joinMonth = joinDate.getMonth() + 1;
+        const currentYear = new Date().getFullYear();
+        const currentMonth = new Date().getMonth() + 1;
+        let totalClAccrued = 0;
+        const endMonth = joinYear === currentYear ? Math.min(12, applicationMonth) : applicationMonth;
+        const startMonth = joinYear === currentYear ? joinMonth : 1;
+
+        for (let month = startMonth; month <= endMonth; month++) {
+            totalClAccrued += 1; // 1 CL per month
+        }
+
         // Calculate total used CL (approved + pending) for the year
         const totalUsedCl = leaveApplications
             .filter(app => (app.leaveType === 'CL' || app.leaveType === 'HALF_DAY_CL') &&
                 (app.status === 'APPROVED' || app.status === 'PENDING'))
             .reduce((total, app) => total + calculateLeaveDays(app.startDate, app.endDate, app.leaveType), 0);
+
         return Math.max(0, totalClAccrued - totalUsedCl);
     };
 
@@ -319,7 +347,12 @@ export default function EmployeeDashboard() {
         if (leaveFormData.leaveType === 'CL' || leaveFormData.leaveType === 'HALF_DAY_CL') {
             const startDate = new Date(leaveFormData.startDate);
             const applicationMonth = startDate.getMonth() + 1;
+            const currentMonth = new Date().getMonth() + 1;
+            const currentYear = new Date().getFullYear();
             const applicationYear = startDate.getFullYear();
+            const joinDate = new Date(userData.joinDate);
+            const joinYear = joinDate.getFullYear();
+            const joinMonth = joinDate.getMonth() + 1;
 
             if (applicationYear > currentYear) {
                 setError('Advance CL application is only allowed within the current year');
@@ -327,7 +360,36 @@ export default function EmployeeDashboard() {
                 return;
             }
 
+            if (joinYear === currentYear && applicationMonth < joinMonth) {
+                setError('Cannot apply CL for a month before your joining date');
+                setIsSubmitting(false);
+                return;
+            }
+
             const availableClForMonth = calculateAvailableClForMonth(applicationMonth);
+            const totalUsedCl = leaveApplications
+                .filter(app => (app.leaveType === 'CL' || app.leaveType === 'HALF_DAY_CL') &&
+                    (app.status === 'APPROVED' || app.status === 'PENDING'))
+                .reduce((total, app) => total + calculateLeaveDays(app.startDate, app.endDate, app.leaveType), 0);
+            const totalClCommitted = totalUsedCl + leaveDays;
+
+            if (applicationMonth <= currentMonth) {
+                const accruedClUpToCurrent = userData.accruedCl || 0;
+                if (totalClCommitted > accruedClUpToCurrent) {
+                    setError(
+                        `Total CL (used + requested) exceeds accrued CL for the current month. Available up to ${new Date().toLocaleString('default', { month: 'long' })}: ${accruedClUpToCurrent.toFixed(1)}`
+                    );
+                    setIsSubmitting(false);
+                    return;
+                }
+            } else {
+                if (totalClCommitted > 12) {
+                    setError(`Total CL (used + requested) exceeds annual limit of 12 days`);
+                    setIsSubmitting(false);
+                    return;
+                }
+            }
+
             if (availableClForMonth < leaveDays) {
                 setError(
                     `Insufficient CL balance for ${startDate.toLocaleString('default', { month: 'long' })}. Requested: ${leaveDays.toFixed(1)}, Available: ${availableClForMonth.toFixed(1)}`
@@ -398,6 +460,7 @@ export default function EmployeeDashboard() {
                 HALF_DAY_LWP: 'leaveWithoutPay',
             };
 
+            // Skip remainingLeaves check for EL and CL due to custom validation
             if (!['EL', 'HALF_DAY_EL', 'CL', 'HALF_DAY_CL'].includes(leaveFormData.leaveType)) {
                 const leaveKey = leaveTypeMap[leaveFormData.leaveType];
                 const remainingLeaves = leaveBalance[leaveKey]?.remaining || 0;
@@ -440,17 +503,15 @@ export default function EmployeeDashboard() {
             if (response.ok) {
                 const startDate = new Date(leaveFormData.startDate);
                 const applicationMonth = startDate.getMonth() + 1;
+                const currentMonth = new Date().getMonth() + 1;
                 let message = `Leave application submitted successfully! Awaiting approval from ${
                     userData?.reportingTo?.fullName || 'your reporting manager'
                 }.`;
                 if (
-                    (leaveFormData.leaveType === 'CL' || leaveFormData.leaveType === 'HALF_DAY_CL')
+                    (leaveFormData.leaveType === 'CL' || leaveFormData.leaveType === 'HALF_DAY_CL') &&
+                    applicationMonth > currentMonth
                 ) {
-                    const totalUsedCl = leaveApplications
-                        .filter(app => (app.leaveType === 'CL' || app.leaveType === 'HALF_DAY_CL') &&
-                            (app.status === 'APPROVED' || app.status === 'PENDING'))
-                        .reduce((total, app) => total + calculateLeaveDays(app.startDate, app.endDate, app.leaveType), 0);
-                    const remainingTotal = Math.min(12, applicationMonth) - (totalUsedCl + leaveDays);
+                    const remainingTotal = leaveBalance.casualLeave.total - totalClCommitted;
                     message += ` Total CL balance after approval: ${remainingTotal.toFixed(1)} days.`;
                 }
                 if (
@@ -634,13 +695,7 @@ export default function EmployeeDashboard() {
             icon: <CalendarCheck size={24} className="text-blue-500" />,
             details: [
                 { label: 'Total Annual', value: leaveBalance.casualLeave.total },
-                {
-                    label: 'Accrued This Year',
-                    value: leaveFormData.startDate ?
-                        Math.min(12, new Date(leaveFormData.startDate).getMonth() + 1) :
-                        currentMonth,
-                    textColor: 'text-blue-600'
-                },
+                { label: 'Accrued This Year', value: userData?.accruedCl || 0, textColor: 'text-blue-600' },
                 { label: 'Used', value: leaveBalance.casualLeave.used.toFixed(1), textColor: 'text-red-600' },
                 { label: 'Remaining', value: leaveBalance.casualLeave.remaining.toFixed(1), textColor: 'text-green-600' },
             ],
@@ -791,7 +846,6 @@ export default function EmployeeDashboard() {
         const isFixedDuration = leaveFormData.leaveType === 'ML' || leaveFormData.leaveType === 'PL';
         const currentMonth = new Date().getMonth() + 1;
         const applicationMonth = leaveFormData.startDate ? new Date(leaveFormData.startDate).getMonth() + 1 : null;
-        const accruedCl = applicationMonth ? Math.min(12, applicationMonth) : currentMonth;
 
         return (
             <div className="space-y-6">
@@ -820,7 +874,7 @@ export default function EmployeeDashboard() {
                     {(leaveFormData.leaveType === 'CL' || leaveFormData.leaveType === 'HALF_DAY_CL') && (
                         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
                             <p className="text-sm text-blue-800 font-medium">
-                                Accrued CL as of {applicationMonth ? new Date(leaveFormData.startDate).toLocaleString('default', { month: 'long' }) : new Date().toLocaleString('default', { month: 'long' })}: {accruedCl.toFixed(1)} days.
+                                Accrued CL as of {new Date().toLocaleString('default', { month: 'long' })}: {(userData?.accruedCl || 0).toFixed(1)} days.
                             </p>
                         </div>
                     )}
@@ -1113,6 +1167,7 @@ export default function EmployeeDashboard() {
 
     return (
         <div className="min-h-screen bg-gray-50 flex font-sans">
+            {/* Sidebar */}
             <div
                 className={`fixed inset-y-0 left-0 z-30 w-64 bg-blue-900 text-white transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 transition-transform duration-300 ease-in-out shadow-lg`}>
                 <div className="flex items-center justify-between p-4 border-b border-blue-800">
@@ -1156,6 +1211,7 @@ export default function EmployeeDashboard() {
                 </nav>
             </div>
 
+            {/* Main Content */}
             <div className="flex-1 flex flex-col lg:ml-64">
                 <header className="bg-white shadow-lg p-4 flex items-center justify-between">
                     <div className="flex items-center">
