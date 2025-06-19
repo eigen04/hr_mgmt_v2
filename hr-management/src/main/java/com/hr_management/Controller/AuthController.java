@@ -9,16 +9,16 @@ import com.hr_management.Repository.PasswordResetTokenRepository;
 import com.hr_management.service.UserService;
 import com.hr_management.dto.ReportingPersonDTO;
 import com.hr_management.dto.UserDTO;
-import java.util.*;
-import jakarta.validation.Valid;
-import jakarta.validation.constraints.Email;
-import jakarta.validation.constraints.NotBlank;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.bind.annotation.*;
-
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Email;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @RestController
@@ -27,6 +27,9 @@ public class AuthController {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private BCryptPasswordEncoder passwordEncoder;
 
     @Autowired
     private PasswordResetTokenRepository tokenRepository;
@@ -47,11 +50,23 @@ public class AuthController {
         }
     }
 
+    @GetMapping("/users")
+    public ResponseEntity<?> getAllUsers() {
+        try {
+            List<User> users = userRepository.findAll();
+            return ResponseEntity.ok(users);
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(new ErrorResponse("Failed to fetch users: " + e.getMessage()));
+        }
+    }
+
     @PostMapping("/signup")
     public ResponseEntity<?> signup(@Valid @RequestBody UserDTO userDTO) {
         try {
-            userService.signup(userDTO);
-            return ResponseEntity.ok(new SuccessResponse("User registered successfully"));
+            userDTO.setStatus("PENDING"); // Ensure PENDING status
+            User user = userService.signup(userDTO);
+            emailService.sendSignupConfirmationEmail(user.getEmail(), user.getFullName());
+            return ResponseEntity.ok(new SuccessResponse("Signup request submitted successfully. Awaiting HR approval."));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
         } catch (Exception e) {
@@ -62,12 +77,24 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@Valid @RequestBody LoginRequest request) {
-        User user = userRepository.findByUsername(request.getUsername())
-                .orElse(null);
-        if (user == null || !userService.loadUserByUsername(request.getUsername()).getPassword().equals(user.getPassword())) {
+        Optional<User> optionalUser = userRepository.findByUsername(request.getUsername());
+        if (optionalUser.isEmpty()) {
             return ResponseEntity.badRequest().body(new ErrorResponse("Invalid username or password"));
         }
 
+        User user = optionalUser.get();
+
+        // Check status
+        if (!user.getStatus().equals("ACTIVE")) {
+            return ResponseEntity.badRequest().body(new ErrorResponse("Account not approved or rejected"));
+        }
+
+        // Verify password
+        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+            return ResponseEntity.badRequest().body(new ErrorResponse("Invalid username or password"));
+        }
+
+        // Generate token
         String role = user.getRole().toUpperCase();
         String token = userService.generateToken(user);
         return ResponseEntity.ok(new LoginResponse(token, role));
@@ -109,7 +136,7 @@ public class AuthController {
         }
 
         User user = resetToken.getUser();
-        user.setPassword(userService.loadUserByUsername(user.getUsername()).getPassword());
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
         userRepository.save(user);
 
         tokenRepository.delete(resetToken);

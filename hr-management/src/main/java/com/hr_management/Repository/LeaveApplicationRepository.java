@@ -38,28 +38,30 @@ public interface LeaveApplicationRepository extends JpaRepository<LeaveApplicati
     @Query("SELECT la FROM LeaveApplication la WHERE la.approverId = :approverId AND la.status = :status")
     List<LeaveApplication> findByApproverIdAndStatus(@Param("approverId") Long approverId, @Param("status") String status);
 
-    // Added method for counting leaves by approverId and status
     @Query("SELECT COUNT(la) FROM LeaveApplication la WHERE la.approverId = :approverId AND la.status = :status")
     long countByApproverIdAndStatus(@Param("approverId") Long approverId, @Param("status") String status);
 
     List<LeaveApplication> findByUserAndStartDate(@Param("user") User user, @Param("startDate") LocalDate startDate);
 
     @Query("SELECT la FROM LeaveApplication la WHERE la.user = :user " +
-           "AND la.status IN ('PENDING', 'APPROVED') " +
-           "AND la.startDate <= :endDate " +
-           "AND la.endDate >= :startDate")
+            "AND la.status IN ('PENDING', 'APPROVED') " +
+            "AND la.startDate <= :endDate " +
+            "AND la.endDate >= :startDate")
     List<LeaveApplication> findOverlappingLeaves(
             @Param("user") User user,
             @Param("startDate") LocalDate startDate,
             @Param("endDate") LocalDate endDate);
 
     @Query("SELECT la FROM LeaveApplication la WHERE la.user = :user " +
-           "AND la.leaveType IN :leaveTypes " +
-           "AND la.startDate BETWEEN :startDate AND :endDate " +
-           "AND la.status = 'APPROVED'")
+            "AND la.leaveType IN :leaveTypes " +
+            "AND la.startDate BETWEEN :startDate AND :endDate " +
+            "AND la.status = 'APPROVED'")
     List<LeaveApplication> findByUserAndLeaveTypeInAndStartDateBetween(
             @Param("user") User user,
             @Param("leaveTypes") List<String> leaveTypes,
             @Param("startDate") LocalDate startDate,
             @Param("endDate") LocalDate endDate);
+
+    @Query("SELECT COUNT(la) FROM LeaveApplication la WHERE la.user.id IN :userIds AND la.status = :status")
+    long countByUserIdInAndStatus(@Param("userIds") List<Long> userIds, @Param("status") String status);
 }

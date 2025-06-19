@@ -7,7 +7,6 @@ import com.hr_management.service.LeaveService;
 import com.hr_management.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.http.HttpStatus;
 
@@ -31,18 +30,8 @@ public class LeaveController {
     private UserService userService;
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('EMPLOYEE', 'PROJECT_MANAGER', 'ASSISTANT_DIRECTOR', 'DIRECTOR')")
     public ResponseEntity<?> applyLeave(@RequestBody LeaveApplication application) {
         try {
-            // Validate leave type
-            String leaveType = application.getLeaveType();
-            if (!leaveType.equals("CL") && !leaveType.equals("EL") && !leaveType.equals("ML") && !leaveType.equals("PL") &&
-                !leaveType.equals("HALF_DAY_CL") && !leaveType.equals("HALF_DAY_EL") && !leaveType.equals("LWP") && !leaveType.equals("HALF_DAY_LWP")) {
-                logger.warn("Invalid leave type: {}", leaveType);
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                        .body(Collections.singletonMap("message", "Invalid leave type: " + leaveType + ". Supported types are: CL, EL, ML, PL, HALF_DAY_CL, HALF_DAY_EL, LWP, HALF_DAY_LWP."));
-            }
-
             LeaveApplication savedApplication = leaveService.applyLeave(application);
             return ResponseEntity.ok(savedApplication);
         } catch (RuntimeException e) {
@@ -69,7 +58,6 @@ public class LeaveController {
     }
 
     @GetMapping("/pending")
-    @PreAuthorize("hasAnyRole('PROJECT_MANAGER', 'ASSISTANT_DIRECTOR', 'DIRECTOR')")
     public ResponseEntity<List<LeaveApplicationDTO>> getPendingLeavesForCurrentUser() {
         try {
             List<LeaveApplicationDTO> leaves = leaveService.getPendingLeavesForCurrentUser();
@@ -82,21 +70,18 @@ public class LeaveController {
     }
 
     @GetMapping("/stats")
-    @PreAuthorize("hasAnyRole('PROJECT_MANAGER', 'ASSISTANT_DIRECTOR', 'DIRECTOR')")
     public ResponseEntity<Map<String, Integer>> getLeaveStatsForCurrentUser() {
         Map<String, Integer> stats = leaveService.getLeaveStatsForCurrentUser();
         return ResponseEntity.ok(stats);
     }
 
     @PostMapping("/{id}/approve")
-    @PreAuthorize("hasAnyRole('PROJECT_MANAGER', 'ASSISTANT_DIRECTOR', 'DIRECTOR')")
     public ResponseEntity<String> approveLeave(@PathVariable Long id) {
         leaveService.approveLeave(id);
         return ResponseEntity.ok("Leave approved successfully");
     }
 
     @PostMapping("/{id}/reject")
-    @PreAuthorize("hasAnyRole('PROJECT_MANAGER', 'ASSISTANT_DIRECTOR', 'DIRECTOR')")
     public ResponseEntity<String> rejectLeave(@PathVariable Long id) {
         leaveService.rejectLeave(id);
         return ResponseEntity.ok("Leave rejected successfully");

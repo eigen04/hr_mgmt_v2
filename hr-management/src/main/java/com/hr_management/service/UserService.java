@@ -41,6 +41,9 @@ public class UserService implements UserDetailsService {
     @Autowired
     private BCryptPasswordEncoder passwordEncoder;
 
+    @Autowired
+    private EmailService emailService; // Add this dependency
+
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
         logger.debug("Loading user by username: {}", username);
@@ -179,7 +182,6 @@ public class UserService implements UserDetailsService {
         leaveBalance.setCasualLeaveRemaining(userDTO.getRole().equalsIgnoreCase("ASSISTANT_DIRECTOR") ? 12.0 : 10.0);
         leaveBalance.setEarnedLeaveUsedFirstHalf(0.0);
         leaveBalance.setEarnedLeaveUsedSecondHalf(0.0);
-        // Remove earnedLeaveRemaining initialization; defer to LeaveService.initializeLeaveBalance
         leaveBalance.setMaternityLeaveUsed(0.0);
         leaveBalance.setMaternityLeaveRemaining(userDTO.getGender().equalsIgnoreCase("Female") ? 182.0 : 0.0);
         leaveBalance.setPaternityLeaveUsed(0.0);
@@ -195,7 +197,7 @@ public class UserService implements UserDetailsService {
         user.setRole(userDTO.getRole());
         user.setGender(userDTO.getGender());
         user.setLeaveBalance(leaveBalance);
-        user.setStatus("ACTIVE");
+        user.setStatus("PENDING"); // Change to PENDING
         user.setLeaveWithoutPayment(0.0);
         user.setHalfDayLwp(0.0);
 
@@ -206,5 +208,26 @@ public class UserService implements UserDetailsService {
         }
 
         return userRepository.save(user);
+    }
+
+    public List<User> getPendingUsers() {
+        return userRepository.findByStatus("PENDING");
+    }
+
+    public void approveUser(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + userId));
+        user.setStatus("ACTIVE");
+        userRepository.save(user);
+        emailService.sendSignupApprovalEmail(user.getEmail(), user.getFullName());
+    }
+
+    public void rejectUser(Long userId, String reason) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + userId));
+        user.setStatus("REJECTED");
+        user.setDisapproveReason(reason);
+        userRepository.save(user);
+        emailService.sendSignupRejectionEmail(user.getEmail(), user.getFullName(), reason);
     }
 }

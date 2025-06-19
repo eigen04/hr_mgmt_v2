@@ -4,19 +4,14 @@ import SignupPage from '../pages/SignupPage';
 import ForgotUsernamePage from '../pages/ForgotUsernamePage';
 import HRDashboardPage from '../pages/HRDashboardPage';
 import ResetPasswordPage from '../pages/ResetPasswordPage';
-import EmployeeDashboardPage from '../pages/EmployeeDashboardPage';
-import HODDashboardPage from '../pages/HODDashboardPage';
 import DirectorDashboardPage from '../pages/DirectorDashboardPage';
-import AssistantDirectorDashPage from '../pages/AssistantDirectorDashPage';
-
+import GenericDashboardPage from "../pages/GenericDashboardPage.jsx";
 const AppRoutes = () => {
   return (
     <Routes>
-      <Route path="/assistantdirector-dashboard" element={<AssistantDirectorDashPage/>}/>
+        <Route path="/dashboard" element={<GenericDashboardPage/>}/>
       <Route path="/director-dashboard" element={<DirectorDashboardPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
-      <Route path="/employee-dashboard" element={<EmployeeDashboardPage />} />
-      <Route path="/hod-dashboard" element={<HODDashboardPage />} />
       <Route path="/" element={<LoginPage />} />
       <Route path="/signup" element={<SignupPage />} />
       <Route path="/forgot-username" element={<ForgotUsernamePage />} />

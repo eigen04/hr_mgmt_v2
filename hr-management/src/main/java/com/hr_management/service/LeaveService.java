@@ -1,4 +1,4 @@
- package com.hr_management.service;
+package com.hr_management.service;
 
 import com.hr_management.Entity.LeaveApplication;
 import com.hr_management.Entity.LeaveApplicationDTO;
@@ -135,42 +135,6 @@ public class LeaveService {
         logger.info("Calculated required days for leave application: {}, type: {}: {}", application.getId(), application.getLeaveType(), requiredDays);
 
         if (effectiveLeaveType.equals("CL")) {
-            LocalDate joinDate = user.getJoinDate();
-            int currentYear = LocalDate.now().getYear();
-            int joinYear = joinDate.getYear(); // Move this line up
-            int applicationYear = application.getStartDate().getYear();
-            int applicationMonth = application.getStartDate().getMonthValue();
-            int currentMonth = LocalDate.now().getMonthValue();
-            int joinMonth = joinDate.getMonthValue();
-
-            if (applicationYear > currentYear) {
-                logger.warn("User {} attempted to apply CL for future year: {}", user.getId(), applicationYear);
-                throw new RuntimeException("Advance CL application is only allowed within the current year");
-            }
-
-            validateClApplication(user, application.getStartDate(), requiredDays, balance.get("CL"));
-
-            int monthsAccruedCurrent = (joinYear == currentYear) ? Math.max(0, currentMonth - joinMonth + 1) : currentMonth;
-            double accruedClUpToCurrent = Math.min(monthsAccruedCurrent, CL_TOTAL);
-
-            double clUsed = calculateTotalUsedDays(user, List.of("CL", "HALF_DAY_CL"));
-            double totalClCommitted = clUsed + requiredDays;
-
-            if (applicationMonth <= currentMonth) {
-                if (totalClCommitted > accruedClUpToCurrent) {
-                    logger.warn("User {} attempted to apply CL exceeding accrued limit for month {}: committed {}, accrued {}",
-                            user.getId(), currentMonth, totalClCommitted, accruedClUpToCurrent);
-                    throw new RuntimeException("Total CL (used + requested) exceeds accrued CL for the current month. Available up to " +
-                            LocalDate.now().getMonth() + ": " + accruedClUpToCurrent);
-                }
-            } else {
-                if (totalClCommitted > CL_TOTAL) {
-                    logger.warn("User {} attempted to apply CL exceeding annual limit: committed {}, limit {}",
-                            user.getId(), totalClCommitted, CL_TOTAL);
-                    throw new RuntimeException("Total CL (used + requested) exceeds annual limit of " + CL_TOTAL);
-                }
-            }
-
             validateClApplication(user, application.getStartDate(), requiredDays, balance.get("CL"));
         }
 
@@ -216,7 +180,6 @@ public class LeaveService {
         int joinYear = joinDate.getYear();
         int joinMonth = joinDate.getMonthValue();
 
-        // Reset CLs if it's a new year
         if (leaveBalance.getLastInitializedYear() == null || leaveBalance.getLastInitializedYear() != currentYear) {
             leaveBalance.setCasualLeaveUsed(0.0);
             leaveBalance.setMonthlyClAccrual(new HashMap<>());
@@ -265,7 +228,6 @@ public class LeaveService {
             totalClAccrued += monthlyClAccrual.getOrDefault(month, 0.0);
         }
 
-        // Include both approved and pending CLs for the entire year to account for advance applications
         double clUsed = calculateTotalUsedDays(user, List.of("CL", "HALF_DAY_CL"),
                 LocalDate.of(currentYear, 1, 1), LocalDate.of(currentYear, 12, 31), true);
         double availableCl = Math.max(0, totalClAccrued - clUsed);
@@ -290,14 +252,13 @@ public class LeaveService {
 
         double x = calculateTotalUsedDays(user, List.of("EL", "HALF_DAY_EL"),
                 LocalDate.of(currentYear, 1, 1), LocalDate.of(currentYear, 6, 30));
-        // Include pending advance EL applications for second half
         double y = calculateTotalUsedDays(user, List.of("EL", "HALF_DAY_EL"),
                 LocalDate.of(currentYear, 7, 1), LocalDate.of(currentYear, 12, 31), true);
-        double carryover = Math.max(0, EL_FIRST_HALF - x - y); // Adjust carryover based on advance applications
+        double carryover = Math.max(0, EL_FIRST_HALF - x - y);
 
         double available;
         if (currentMonth <= 6) {
-            available = Math.max(0, EL_FIRST_HALF - x - y); // First half availability reduced by advance applications
+            available = Math.max(0, EL_FIRST_HALF - x - y);
         } else {
             available = Math.max(0, (EL_SECOND_HALF + carryover) - y);
         }
@@ -325,14 +286,12 @@ public class LeaveService {
             throw new RuntimeException("Advance CL application is only allowed within the current year");
         }
 
-        // Calculate total accrued CLs up to the application month
         int endMonth = (joinYear == currentYear) ? Math.min(12, applicationMonth) : applicationMonth;
         double totalClAccrued = 0.0;
         for (int month = (joinYear == currentYear) ? joinDate.getMonthValue() : 1; month <= endMonth; month++) {
             totalClAccrued += 1.0;
         }
 
-        // Include pending and approved CLs for the entire year
         double clUsed = calculateTotalUsedDays(user, List.of("CL", "HALF_DAY_CL"),
                 LocalDate.of(currentYear, 1, 1), LocalDate.of(currentYear, 12, 31), true);
         double availableForApplicationMonth = Math.max(0, totalClAccrued - clUsed);
@@ -375,14 +334,12 @@ public class LeaveService {
             }
         } else {
             if (currentMonth <= 6) {
-                // Advance EL application for second half
-                double totalEligible = EL_TOTAL_ANNUAL; // Use annual limit for advance applications
+                double totalEligible = EL_TOTAL_ANNUAL;
                 if (x + y + requiredDays > totalEligible) {
                     logger.warn("User {} exceeded annual EL limit for advance second half: used x={}, y={}, requested {}, totalEligible={}", user.getId(), x, y, requiredDays, totalEligible);
                     throw new RuntimeException("Cannot apply more than " + (totalEligible - x - y) + " EL days in advance for the second half. Requested: " + requiredDays + ", Available: " + (totalEligible - x - y));
                 }
             } else {
-                // Same-period second half application
                 if (y + requiredDays > zEligible) {
                     logger.warn("User {} exceeded second half EL limit: used y={}, requested {}, zEligible={}", user.getId(), y, requiredDays, zEligible);
                     throw new RuntimeException("Cannot apply more than " + zEligible + " EL days in the second half. Requested: " + requiredDays + ", Used: " + y);
@@ -402,8 +359,8 @@ public class LeaveService {
                 .orElseThrow(() -> new RuntimeException("Leave application not found"));
         User currentUser = userService.getCurrentUser();
 
-        Long approverId = leave.getApproverId();
-        if (approverId == null || !approverId.equals(currentUser.getId())) {
+        User approver = leave.getUser().getReportingTo();
+        if (approver == null || !approver.getId().equals(currentUser.getId())) {
             logger.warn("User {} attempted to approve leave {} they are not authorized for", currentUser.getId(), leaveId);
             throw new RuntimeException("You are not authorized to approve this leave");
         }
@@ -465,8 +422,8 @@ public class LeaveService {
                 .orElseThrow(() -> new RuntimeException("Leave application not found"));
         User currentUser = userService.getCurrentUser();
 
-        Long approverId = leave.getApproverId();
-        if (approverId == null || !approverId.equals(currentUser.getId())) {
+        User approver = leave.getUser().getReportingTo();
+        if (approver == null || !approver.getId().equals(currentUser.getId())) {
             logger.warn("User {} attempted to reject leave {} they are not authorized for", currentUser.getId(), leaveId);
             throw new RuntimeException("You are not authorized to reject this leave");
         }
@@ -477,51 +434,20 @@ public class LeaveService {
 
     public List<LeaveApplicationDTO> getPendingLeavesForCurrentUser() {
         User currentUser = userService.getCurrentUser();
-        String userRole = currentUser.getRole();
-        List<LeaveApplication> pendingLeaves;
-
-        if (userRole.equals("ASSISTANT_DIRECTOR")) {
-            String userDepartment = currentUser.getDepartment();
-            pendingLeaves = leaveApplicationRepository.findByApproverIdAndStatus(currentUser.getId(), "PENDING")
-                    .stream()
-                    .filter(leave -> leave.getUser().getDepartment().equals(userDepartment))
-                    .collect(Collectors.toList());
-        } else {
-            pendingLeaves = leaveApplicationRepository.findByApproverIdAndStatus(currentUser.getId(), "PENDING");
-        }
-
+        List<User> subordinates = currentUser.getSubordinates();
+        List<Long> subordinateIds = subordinates.stream().map(User::getId).collect(Collectors.toList());
+        List<LeaveApplication> pendingLeaves = leaveApplicationRepository.findByUserIdInAndStatus(subordinateIds, "PENDING");
         return pendingLeaves.stream().map(this::convertToDTO).collect(Collectors.toList());
     }
 
     public Map<String, Integer> getLeaveStatsForCurrentUser() {
         User currentUser = userService.getCurrentUser();
-        String userRole = currentUser.getRole();
+        List<User> subordinates = currentUser.getSubordinates();
+        List<Long> subordinateIds = subordinates.stream().map(User::getId).collect(Collectors.toList());
         Map<String, Integer> stats = new HashMap<>();
-
-        if (userRole.equals("ASSISTANT_DIRECTOR")) {
-            String userDepartment = currentUser.getDepartment();
-            long pending = leaveApplicationRepository.findByApproverIdAndStatus(currentUser.getId(), "PENDING")
-                    .stream()
-                    .filter(leave -> leave.getUser().getDepartment().equals(userDepartment))
-                    .count();
-            long approved = leaveApplicationRepository.findByApproverIdAndStatus(currentUser.getId(), "APPROVED")
-                    .stream()
-                    .filter(leave -> leave.getUser().getDepartment().equals(userDepartment))
-                    .count();
-            long rejected = leaveApplicationRepository.findByApproverIdAndStatus(currentUser.getId(), "REJECTED")
-                    .stream()
-                    .filter(leave -> leave.getUser().getDepartment().equals(userDepartment))
-                    .count();
-
-            stats.put("pending", (int) pending);
-            stats.put("approved", (int) approved);
-            stats.put("rejected", (int) rejected);
-        } else {
-            stats.put("pending", (int) leaveApplicationRepository.countByApproverIdAndStatus(currentUser.getId(), "PENDING"));
-            stats.put("approved", (int) leaveApplicationRepository.countByApproverIdAndStatus(currentUser.getId(), "APPROVED"));
-            stats.put("rejected", (int) leaveApplicationRepository.countByApproverIdAndStatus(currentUser.getId(), "REJECTED"));
-        }
-
+        stats.put("pending", (int) leaveApplicationRepository.countByUserIdInAndStatus(subordinateIds, "PENDING"));
+        stats.put("approved", (int) leaveApplicationRepository.countByUserIdInAndStatus(subordinateIds, "APPROVED"));
+        stats.put("rejected", (int) leaveApplicationRepository.countByUserIdInAndStatus(subordinateIds, "REJECTED"));
         return stats;
     }
 

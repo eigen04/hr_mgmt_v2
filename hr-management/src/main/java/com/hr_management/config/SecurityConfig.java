@@ -63,7 +63,7 @@ public class SecurityConfig {
         configuration.setAllowedHeaders(Arrays.asList("*"));
         configuration.setAllowCredentials(true);
 
-        System.out.println("CORS Allowed Origins: " + configuration.getAllowedOrigins()); // Debug log
+        System.out.println("CORS Allowed Origins: " + configuration.getAllowedOrigins());
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
@@ -73,52 +73,44 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-            .csrf(csrf -> csrf.disable())
-            .authorizeHttpRequests(auth -> auth
-                // Public endpoints
-                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                .requestMatchers("/api/auth/**").permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/departments").permitAll()  // Public for signup
-                .requestMatchers(HttpMethod.GET, "/api/roles").permitAll()  // Public for signup
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .csrf(csrf -> csrf.disable())
+                .authorizeHttpRequests(auth -> auth
+                        // Public endpoints
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        .requestMatchers("/api/auth/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/departments").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/roles").permitAll()
 
-                // Director-only endpoints
-                .requestMatchers(HttpMethod.POST, "/api/departments").hasRole("DIRECTOR")
-                .requestMatchers(HttpMethod.POST, "/api/roles").hasRole("DIRECTOR")
-                .requestMatchers(HttpMethod.GET, "/api/departments/stats").hasRole("DIRECTOR")
-                .requestMatchers(HttpMethod.GET, "/api/users/hods").hasRole("DIRECTOR")
-                .requestMatchers(HttpMethod.PATCH, "/api/users/*/status").hasRole("DIRECTOR")
+                        // Director-only endpoints
+                        .requestMatchers(HttpMethod.POST, "/api/departments").hasRole("DIRECTOR")
+                        .requestMatchers(HttpMethod.POST, "/api/roles").hasRole("DIRECTOR")
+                        .requestMatchers(HttpMethod.GET, "/api/departments/stats").hasRole("DIRECTOR")
+                        .requestMatchers(HttpMethod.GET, "/api/users/hods").hasRole("DIRECTOR")
+                        .requestMatchers(HttpMethod.PATCH, "/api/users/*/status").hasRole("DIRECTOR")
 
-                // HR and Director endpoints
-                .requestMatchers(HttpMethod.GET, "/api/hr/departments").hasAnyRole("HR", "DIRECTOR")
-                .requestMatchers(HttpMethod.GET, "/api/hr/dashboard-metrics").hasAnyRole("HR", "DIRECTOR")
+                        // HR-specific endpoints
+                        .requestMatchers("/api/hr/**").hasRole("HR")
+                        .requestMatchers(HttpMethod.GET, "/api/hr/pending-signups").hasRole("HR")
+                        .requestMatchers(HttpMethod.POST, "/api/hr/approve-signup/*").hasRole("HR")
+                        .requestMatchers(HttpMethod.POST, "/api/hr/disapprove-signup/*").hasRole("HR")
 
-                // Assistant Director, HR, and Director can access department employees (department restriction handled in controller)
-                .requestMatchers(HttpMethod.GET, "/api/hr/departments/*/employees")
-                    .hasAnyRole("HR", "DIRECTOR", "ASSISTANT_DIRECTOR", "PROJECT_MANAGER")
+                        // Leave endpoints for all authenticated users
+                        .requestMatchers(HttpMethod.POST, "/api/leaves").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/leaves").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/leaves/balance").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/leaves/pending").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/leaves/stats").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/leaves/*/approve").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/leaves/*/reject").authenticated()
 
-                // Assistant Director, Director, and Project Manager can access department metrics (department restriction handled in controller)
-                .requestMatchers(HttpMethod.GET, "/api/hr/department-metrics/*")
-                    .hasAnyRole("DIRECTOR", "ASSISTANT_DIRECTOR", "PROJECT_MANAGER")
-
-                // Leave endpoints for multiple roles
-                .requestMatchers(HttpMethod.POST, "/api/leaves").hasAnyRole("EMPLOYEE", "PROJECT_MANAGER", "ASSISTANT_DIRECTOR", "DIRECTOR")
-                .requestMatchers(HttpMethod.GET, "/api/leaves").hasAnyRole("EMPLOYEE", "PROJECT_MANAGER", "ASSISTANT_DIRECTOR", "DIRECTOR")
-                .requestMatchers(HttpMethod.GET, "/api/leaves/balance").hasAnyRole("EMPLOYEE", "PROJECT_MANAGER", "ASSISTANT_DIRECTOR", "DIRECTOR")
-                .requestMatchers(HttpMethod.GET, "/api/leaves/pending").hasAnyRole("PROJECT_MANAGER", "ASSISTANT_DIRECTOR", "DIRECTOR")
-                .requestMatchers(HttpMethod.GET, "/api/leaves/stats").hasAnyRole("PROJECT_MANAGER", "ASSISTANT_DIRECTOR", "DIRECTOR")
-                .requestMatchers(HttpMethod.POST, "/api/leaves/*/approve").hasAnyRole("PROJECT_MANAGER", "ASSISTANT_DIRECTOR", "DIRECTOR")
-                .requestMatchers(HttpMethod.POST, "/api/leaves/*/reject").hasAnyRole("PROJECT_MANAGER", "ASSISTANT_DIRECTOR", "DIRECTOR")
-
-                // Employee-only endpoints
-                .requestMatchers("/api/employee/**").hasRole("EMPLOYEE")
-
-                // Authenticated endpoints (e.g., /api/users/me, /api/departments/{id})
-                .anyRequest().authenticated()
-            )
-            .sessionManagement(session -> session
-                .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
-            );
+                        // Authenticated endpoints
+                        .requestMatchers(HttpMethod.GET, "/api/users/subordinates").authenticated()
+                        .anyRequest().authenticated()
+                )
+                .sessionManagement(session -> session
+                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                );
 
         http.addFilterBefore(jwtAuthenticationFilter(), UsernamePasswordAuthenticationFilter.class);
 

@@ -10,8 +10,9 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
-import java.util.Optional;
-import java.util.Collections;
+
+import java.time.LocalDate;
+import java.util.*;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -40,21 +41,18 @@ public class UserController {
 
     @GetMapping("/departments/{id}")
     public ResponseEntity<Department> getDepartmentById(@PathVariable Long id) {
-        // Get the current user and their role
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         String username = authentication.getName();
         User currentUser = userService.getCurrentUser();
         String userRole = currentUser.getRole();
         String userDepartment = currentUser.getDepartment();
 
-        // Fetch the department
         Optional<Department> departmentOpt = departmentService.getDepartmentById(id);
         if (departmentOpt.isEmpty()) {
             return ResponseEntity.status(404).body(null);
         }
         Department department = departmentOpt.get();
 
-        // Restrict ASSISTANT_DIRECTOR to their own department
         if (userRole.equals("ASSISTANT_DIRECTOR")) {
             if (!department.getName().equals(userDepartment)) {
                 return ResponseEntity.status(403).body(null);
@@ -70,6 +68,11 @@ public class UserController {
         private String department;
         private String email;
         private String status;
+        private String disapproveReason;
+        private String role; // New field
+        private String gender; // New field
+        private String reportingToName; // New field
+        private LocalDate joinDate; // New field
 
         public Long getId() { return id; }
         public void setId(Long id) { this.id = id; }
@@ -81,6 +84,16 @@ public class UserController {
         public void setEmail(String email) { this.email = email; }
         public String getStatus() { return status; }
         public void setStatus(String status) { this.status = status; }
+        public String getDisapproveReason() { return disapproveReason; }
+        public void setDisapproveReason(String disapproveReason) { this.disapproveReason = disapproveReason; }
+        public String getRole() { return role; }
+        public void setRole(String role) { this.role = role; }
+        public String getGender() { return gender; }
+        public void setGender(String gender) { this.gender = gender; }
+        public String getReportingToName() { return reportingToName; }
+        public void setReportingToName(String reportingToName) { this.reportingToName = reportingToName; }
+        public LocalDate getJoinDate() { return joinDate; }
+        public void setJoinDate(LocalDate joinDate) { this.joinDate = joinDate; }
     }
 
     @GetMapping("/users/hods")
@@ -95,6 +108,11 @@ public class UserController {
                 dto.setDepartment(user.getDepartment());
                 dto.setEmail(user.getEmail());
                 dto.setStatus(user.getStatus());
+                dto.setDisapproveReason(user.getDisapproveReason());
+                dto.setRole(user.getRole());
+                dto.setGender(user.getGender());
+                dto.setReportingToName(user.getReportingTo() != null ? user.getReportingTo().getFullName() : null);
+                dto.setJoinDate(user.getJoinDate());
                 return dto;
             }).collect(Collectors.toList());
             return ResponseEntity.ok(hodDTOs);
@@ -114,6 +132,68 @@ public class UserController {
             return ResponseEntity.status(400).body(Collections.singletonMap("message", e.getMessage()));
         } catch (Exception e) {
             return ResponseEntity.status(500).body(Collections.singletonMap("message", "An error occurred: " + e.getMessage()));
+        }
+    }
+
+    @GetMapping("/users/subordinates")
+    public ResponseEntity<List<User>> getSubordinates() {
+        User currentUser = userService.getCurrentUser();
+        List<User> subordinates = currentUser.getSubordinates();
+        return ResponseEntity.ok(subordinates);
+    }
+
+    @GetMapping("/hr/pending-signups")
+    @PreAuthorize("hasRole('HR')")
+    public ResponseEntity<List<UserDTO>> getPendingSignups() {
+        try {
+            List<User> pendingUsers = userService.getPendingUsers();
+            List<UserDTO> userDTOs = pendingUsers.stream().map(user -> {
+                UserDTO dto = new UserDTO();
+                dto.setId(user.getId());
+                dto.setFullName(user.getFullName());
+                dto.setDepartment(user.getDepartment());
+                dto.setEmail(user.getEmail());
+                dto.setStatus(user.getStatus());
+                dto.setDisapproveReason(user.getDisapproveReason());
+                dto.setRole(user.getRole());
+                dto.setGender(user.getGender());
+                dto.setReportingToName(user.getReportingTo() != null ? user.getReportingTo().getFullName() : null);
+                dto.setJoinDate(user.getJoinDate());
+                return dto;
+            }).collect(Collectors.toList());
+            return ResponseEntity.ok(userDTOs);
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Collections.emptyList());
+        }
+    }
+
+    @PostMapping("/hr/approve-signup/{userId}")
+    @PreAuthorize("hasRole('HR')")
+    public ResponseEntity<?> approveSignup(@PathVariable Long userId) {
+        try {
+            userService.approveUser(userId);
+            return ResponseEntity.ok(new AuthController.SuccessResponse("User approved successfully"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(new AuthController.ErrorResponse(e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(new AuthController.ErrorResponse("An error occurred: " + e.getMessage()));
+        }
+    }
+
+    @PostMapping("/hr/disapprove-signup/{userId}")
+    @PreAuthorize("hasRole('HR')")
+    public ResponseEntity<?> disapproveSignup(@PathVariable Long userId, @RequestBody Map<String, String> request) {
+        String reason = request.get("reason");
+        if (reason == null || reason.trim().isEmpty()) {
+            return ResponseEntity.badRequest().body(new AuthController.ErrorResponse("Reason for disapproval is required"));
+        }
+        try {
+            userService.rejectUser(userId, reason);
+            return ResponseEntity.ok(new AuthController.SuccessResponse("User disapproved successfully"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(new AuthController.ErrorResponse(e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(new AuthController.ErrorResponse("An error occurred: " + e.getMessage()));
         }
     }
 }

@@ -29,7 +29,43 @@ public class EmailService {
                 "This link will expire in 1 hour. If you did not request a password reset, please ignore this email.\n\n" +
                 "Best regards,\nBISAG-N Team");
         message.setFrom(fromEmail);
+        mailSender.send(message);
+    }
 
+    public void sendSignupConfirmationEmail(String toEmail, String fullName) {
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setTo(toEmail);
+        message.setSubject("BISAG-N HR System - Signup Request Submitted");
+        message.setText("Dear " + fullName + ",\n\n" +
+                "Your signup request for the BISAG-N HR Management System has been successfully submitted.\n" +
+                "It is currently awaiting approval from our HR team. You will be notified once your account is reviewed.\n\n" +
+                "Best regards,\nBISAG-N Team");
+        message.setFrom(fromEmail);
+        mailSender.send(message);
+    }
+
+    public void sendSignupApprovalEmail(String toEmail, String fullName) {
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setTo(toEmail);
+        message.setSubject("BISAG-N HR System - Account Approved");
+        message.setText("Dear " + fullName + ",\n\n" +
+                "Congratulations! Your account for the BISAG-N HR Management System has been approved.\n" +
+                "You can now log in using your credentials at: " + frontendUrl + "\n\n" +
+                "Best regards,\nBISAG-N Team");
+        message.setFrom(fromEmail);
+        mailSender.send(message);
+    }
+
+    public void sendSignupRejectionEmail(String toEmail, String fullName, String reason) {
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setTo(toEmail);
+        message.setSubject("BISAG-N HR System - Account Request Rejected");
+        message.setText("Dear " + fullName + ",\n\n" +
+                "We regret to inform you that your signup request for the BISAG-N HR Management System has been rejected.\n" +
+                "Reason: " + reason + "\n\n" +
+                "If you have any questions, please contact our HR team.\n\n" +
+                "Best regards,\nBISAG-N Team");
+        message.setFrom(fromEmail);
         mailSender.send(message);
     }
 }

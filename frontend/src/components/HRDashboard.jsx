@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, Clock, CheckCircle, AlertCircle, Building, Menu, X, LogOut, Download, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Users, Clock, CheckCircle, AlertCircle, Building, Menu, X, LogOut, Download, ChevronLeft, ChevronRight, FileText } from 'lucide-react';
 import ExcelJS from 'exceljs';
 
 export default function HRDashboard() {
@@ -17,6 +17,8 @@ export default function HRDashboard() {
   });
   const [departmentData, setDepartmentData] = useState([]);
   const [employeesInDepartment, setEmployeesInDepartment] = useState([]);
+  const [pendingSignups, setPendingSignups] = useState([]);
+  const [disapproveModal, setDisapproveModal] = useState({ open: false, userId: null, reason: '' }); // New state for modal
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -81,14 +83,14 @@ export default function HRDashboard() {
 
         const data = await response.json();
         const formattedData = data
-          .filter(dept => dept.id !== undefined && dept.id !== null)
-          .map(dept => ({
-            id: dept.id,
-            name: dept.name || 'Unnamed Department',
-            description: dept.description || '',
-            employeeCount: dept.employeeCount || 0,
-            onLeaveCount: dept.onLeaveCount || 0,
-          }));
+            .filter(dept => dept.id !== undefined && dept.id !== null)
+            .map(dept => ({
+              id: dept.id,
+              name: dept.name || 'Unnamed Department',
+              description: dept.description || '',
+              employeeCount: dept.employeeCount || 0,
+              onLeaveCount: dept.onLeaveCount || 0,
+            }));
 
         setDepartmentData(formattedData);
       } catch (error) {
@@ -137,10 +139,40 @@ export default function HRDashboard() {
       }
     };
 
+    const fetchPendingSignups = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+        const response = await fetch('http://localhost:8081/api/hr/pending-signups', {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        setPendingSignups(data);
+      } catch (error) {
+        console.error('Error fetching pending signups:', error);
+        setError('Failed to load pending signup requests.');
+        setPendingSignups([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
     fetchUserData();
     fetchDepartmentData();
     fetchDashboardData();
-  }, [navigate]);
+    if (activeView === 'pending-signups') {
+      fetchPendingSignups();
+    }
+  }, [navigate, activeView]);
 
   useEffect(() => {
     if (notification.message) {
@@ -148,6 +180,68 @@ export default function HRDashboard() {
       return () => clearTimeout(timer);
     }
   }, [notification]);
+
+  const handleApproveSignup = async (userId) => {
+    const token = localStorage.getItem('authToken');
+    try {
+      setIsLoading(true);
+      const response = await fetch(`http://localhost:8081/api/hr/approve-signup/${userId}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        setPendingSignups(prev => prev.filter(user => user.id !== userId));
+        setNotification({ message: 'User approved successfully.', type: 'success' });
+      } else {
+        const data = await response.json().catch(() => ({}));
+        setNotification({ message: `Failed to approve user: ${data.message || 'Unknown error'}`, type: 'error' });
+      }
+    } catch (error) {
+      console.error('Error approving signup:', error);
+      setNotification({ message: 'Failed to approve user.', type: 'error' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDisapproveSignup = async () => {
+    const token = localStorage.getItem('authToken');
+    const { userId, reason } = disapproveModal;
+    if (!reason.trim()) {
+      setNotification({ message: 'Please provide a reason for disapproval.', type: 'error' });
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      const response = await fetch(`http://localhost:8081/api/hr/disapprove-signup/${userId}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ reason }),
+      });
+
+      if (response.ok) {
+        setPendingSignups(prev => prev.filter(user => user.id !== userId));
+        setDisapproveModal({ open: false, userId: null, reason: '' });
+        setNotification({ message: 'User disapproved successfully.', type: 'success' });
+      } else {
+        const data = await response.json().catch(() => ({}));
+        setNotification({ message: `Failed to disapprove user: ${data.message || 'Unknown error'}`, type: 'error' });
+      }
+    } catch (error) {
+      console.error('Error disapproving signup:', error);
+      setNotification({ message: 'Failed to disapprove user.', type: 'error' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const fetchEmployeesInDepartment = async (deptId) => {
     const token = localStorage.getItem('authToken');
@@ -365,7 +459,7 @@ export default function HRDashboard() {
     }
     setSelectedDepartment(deptId);
     setSelectedEmployee(null);
-    setActiveView(null); // Clear activeView to ensure department view renders
+    setActiveView(null);
     fetchEmployeesInDepartment(deptId);
   };
 
@@ -496,53 +590,119 @@ export default function HRDashboard() {
     const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
     return (
-      <div className="bg-white p-6 rounded-lg shadow-lg border border-gray-200">
-        <div className="flex justify-between items-center mb-6">
-          <h3 className="text-xl font-semibold text-gray-900">{monthName} {year}</h3>
-          <div className="flex space-x-2">
-            <button
-              onClick={() => handleMonthChange(-1)}
-              className="p-2 rounded-full hover:bg-gray-100 transition duration-200"
-              aria-label="Previous month"
-            >
-              <ChevronLeft size={20} className="text-gray-700" />
-            </button>
-            <button
-              onClick={() => handleMonthChange(1)}
-              className="p-2 rounded-full hover:bg-gray-100 transition duration-200"
-              aria-label="Next month"
-            >
-              <ChevronRight size={20} className="text-gray-700" />
-            </button>
+        <div className="bg-white p-6 rounded-lg shadow-lg border border-gray-200">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-xl font-semibold text-gray-900">{monthName} {year}</h3>
+            <div className="flex space-x-2">
+              <button
+                  onClick={() => handleMonthChange(-1)}
+                  className="p-2 rounded-full hover:bg-gray-100 transition duration-200"
+                  aria-label="Previous month"
+              >
+                <ChevronLeft size={20} className="text-gray-700" />
+              </button>
+              <button
+                  onClick={() => handleMonthChange(1)}
+                  className="p-2 rounded-full hover:bg-gray-100 transition duration-200"
+                  aria-label="Next month"
+              >
+                <ChevronRight size={20} className="text-gray-700" />
+              </button>
+            </div>
+          </div>
+          <div className="grid grid-cols-7 gap-1 text-center text-sm font-semibold text-gray-600 mb-3">
+            {daysOfWeek.map(day => (
+                <div key={`weekday-${day}`} className="py-2">{day}</div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7 gap-1">
+            {calendarDays.map((day, index) => (
+                <div
+                    key={day.day ? `${year}-${monthName}-${day.day}` : `empty-${index}`}
+                    className={`aspect-square flex items-center justify-center border rounded-sm text-sm font-medium transition-all duration-200 ${
+                        day.day ? getLeaveColor(day.leaveType, day.isHalfDay) : 'bg-gray-100'
+                    } ${day.day && (day.leaveType || day.isHalfDay) ? 'cursor-help' : ''}`}
+                    title={day.day && (day.leaveType || day.isHalfDay) ? getLeaveTooltip(day.leaveType, day.isHalfDay) : ''}
+                >
+                  {day.day || ''}
+                </div>
+            ))}
+          </div>
+          <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-3">
+            {leaveTypes.map(leave => (
+                <div key={leave.type} className="flex items-center space-x-2">
+                  <div className={`w-4 h-4 ${leave.bgColor} border ${leave.borderColor} rounded-sm`}></div>
+                  <span className="text-sm text-gray-700">{leave.label}</span>
+                </div>
+            ))}
           </div>
         </div>
-        <div className="grid grid-cols-7 gap-1 text-center text-sm font-semibold text-gray-600 mb-3">
-          {daysOfWeek.map(day => (
-            <div key={`weekday-${day}`} className="py-2">{day}</div>
-          ))}
+    );
+  };
+
+  const renderPendingSignups = () => {
+    if (pendingSignups.length === 0 && !isLoading) {
+      return (
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center">
+            <p className="text-sm text-gray-700">No pending signup requests.</p>
+          </div>
+      );
+    }
+
+    return (
+        <div className="bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider">ID</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider">Name</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider">Email</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider">Role</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider">Department</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider">Gender</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider">Reporting To</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider">Join Date</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider">Status</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
+              </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+              {pendingSignups.map(user => (
+                  <tr key={user.id} className="hover:bg-gray-50 transition duration-150">
+                    <td className="px-6 py-4 whitespace-nowrap text-gray-900">{user.id}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-gray-900">{user.fullName}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-gray-600">{user.email}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-gray-600">{user.role}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-gray-600">{user.department || 'N/A'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-gray-600">{user.gender || 'N/A'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-gray-600">{user.reportingToName || 'N/A'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-gray-600">{user.joinDate || 'N/A'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-gray-600">{user.status}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex space-x-2">
+                        <button
+                            onClick={() => handleApproveSignup(user.id)}
+                            className="bg-green-600 text-white px-3 py-1 rounded-lg hover:bg-green-700 transition duration-200"
+                            disabled={isLoading}
+                        >
+                          Approve
+                        </button>
+                        <button
+                            onClick={() => setDisapproveModal({ open: true, userId: user.id, reason: '' })}
+                            className="bg-red-600 text-white px-3 py-1 rounded-lg hover:bg-red-700 transition duration-200"
+                            disabled={isLoading}
+                        >
+                          Disapprove
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+              ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-        <div className="grid grid-cols-7 gap-1">
-          {calendarDays.map((day, index) => (
-            <div
-              key={day.day ? `${year}-${monthName}-${day.day}` : `empty-${index}`}
-              className={`aspect-square flex items-center justify-center border rounded-sm text-sm font-medium transition-all duration-200 ${
-                day.day ? getLeaveColor(day.leaveType, day.isHalfDay) : 'bg-gray-100'
-              } ${day.day && (day.leaveType || day.isHalfDay) ? 'cursor-help' : ''}`}
-              title={day.day && (day.leaveType || day.isHalfDay) ? getLeaveTooltip(day.leaveType, day.isHalfDay) : ''}
-            >
-              {day.day || ''}
-            </div>
-          ))}
-        </div>
-        <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-3">
-          {leaveTypes.map(leave => (
-            <div key={leave.type} className="flex items-center space-x-2">
-              <div className={`w-4 h-4 ${leave.bgColor} border ${leave.borderColor} rounded-sm`}></div>
-              <span className="text-sm text-gray-700">{leave.label}</span>
-            </div>
-          ))}
-        </div>
-      </div>
     );
   };
 
@@ -550,176 +710,196 @@ export default function HRDashboard() {
     const department = departmentData.find(d => d.id === selectedDepartment);
     if (!department) {
       return (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-center">
-          <p className="text-sm text-yellow-700">Department not found.</p>
-        </div>
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-center">
+            <p className="text-sm text-yellow-700">Department not found.</p>
+          </div>
       );
     }
     return (
-      <div className="space-y-6">
-        <div className="flex justify-between items-center">
-          <div className="flex items-center space-x-3">
-            <button
-              onClick={backToOverview}
-              className="p-2 rounded-full hover:bg-gray-100 transition duration-200"
-              aria-label="Back to departments"
-            >
-              <ChevronLeft size={20} className="text-gray-700" />
-            </button>
-            <h2 className="text-2xl font-semibold text-gray-900">{department.name}</h2>
-          </div>
-          <button
-            onClick={() => handleExportExcel(selectedDepartment)}
-            className="flex items-center space-x-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition duration-200"
-          >
-            <Download size={16} />
-            <span>Export Leave Report</span>
-          </button>
-        </div>
-        {employeesInDepartment.length === 0 && !isLoading ? (
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center">
-            <p className="text-sm text-gray-700">No employees found in this department.</p>
-          </div>
-        ) : (
-          <div className="bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider">Employee Name</th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider">Position</th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {employeesInDepartment.map(employee => (
-                    <tr key={employee.id} className="hover:bg-gray-50 transition duration-150">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="font-medium text-gray-900">{employee.name}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-gray-600">{employee.position}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <button
-                          onClick={() => handleEmployeeClick(employee)}
-                          className="text-blue-600 hover:text-blue-800 font-medium flex items-center space-x-1 transition duration-200"
-                        >
-                          <span>View Leave Calendar</span>
-                          <ChevronRight size={16} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+        <div className="space-y-6">
+          <div className="flex justify-between items-center">
+            <div className="flex items-center space-x-3">
+              <button
+                  onClick={backToOverview}
+                  className="p-2 rounded-full hover:bg-gray-100 transition duration-200"
+                  aria-label="Back to departments"
+              >
+                <ChevronLeft size={20} className="text-gray-700" />
+              </button>
+              <h2 className="text-2xl font-semibold text-gray-900">{department.name}</h2>
+            </div>
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center bg-white border border-gray-200 rounded-lg shadow-sm">
+                <button
+                    onClick={() => handleMonthChange(-1)}
+                    className="p-2 hover:bg-gray-100 rounded-l-lg transition duration-200"
+                    aria-label="Previous month"
+                >
+                  <ChevronLeft size={16} className="text-gray-600" />
+                </button>
+                <span className="px-4 py-2 text-sm font-medium text-gray-800">
+                {currentMonth.toLocaleString('default', { month: 'long', year: 'numeric' })}
+              </span>
+                <button
+                    onClick={() => handleMonthChange(1)}
+                    className="p-2 hover:bg-gray-100 rounded-r-lg transition duration-200"
+                    aria-label="Next month"
+                >
+                  <ChevronRight size={16} className="text-gray-600" />
+                </button>
+              </div>
+              <button
+                  onClick={() => handleExportExcel(selectedDepartment)}
+                  className="flex items-center space-x-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition duration-200"
+              >
+                <Download size={16} />
+                <span>Export Leave Report</span>
+              </button>
             </div>
           </div>
-        )}
-      </div>
+          {employeesInDepartment.length === 0 && !isLoading ? (
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center">
+                <p className="text-sm text-gray-700">No employees found in this department.</p>
+              </div>
+          ) : (
+              <div className="bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider">Employee Name</th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider">Position</th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider">Action</th>
+                    </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                    {employeesInDepartment.map(employee => (
+                        <tr key={employee.id} className="hover:bg-gray-50 transition duration-150">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="font-medium text-gray-900">{employee.name}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-gray-600">{employee.position}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <button
+                                onClick={() => handleEmployeeClick(employee)}
+                                className="text-blue-600 hover:text-blue-800 font-medium flex items-center space-x-1 transition duration-200"
+                            >
+                              <span>View Leave Calendar</span>
+                              <ChevronRight size={16} />
+                            </button>
+                          </td>
+                        </tr>
+                    ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+          )}
+        </div>
     );
   };
 
   const renderEmployeeView = () => {
     if (!selectedEmployee) return null;
     return (
-      <div className="space-y-6">
-        <div className="flex items-center space-x-3">
-          <button
-            onClick={backToDepartment}
-            className="p-2 rounded-full hover:bg-gray-100 transition duration-200"
-          >
-            <ChevronLeft size={20} className="text-gray-700" />
-          </button>
-          <h2 className="text-2xl font-semibold text-gray-900">{selectedEmployee.name}'s Leave Calendar</h2>
+        <div className="space-y-6">
+          <div className="flex items-center space-x-3">
+            <button
+                onClick={backToDepartment}
+                className="p-2 rounded-full hover:bg-gray-100 transition duration-200"
+            >
+              <ChevronLeft size={20} className="text-gray-700" />
+            </button>
+            <h2 className="text-2xl font-semibold text-gray-900">{selectedEmployee.name}'s Leave Calendar</h2>
+          </div>
+          {renderLeaveCalendar()}
         </div>
-        {renderLeaveCalendar()}
-      </div>
     );
   };
 
   const renderDepartmentOverview = () => {
     return (
-      <div className="space-y-6">
-        <h2 className="text-2xl font-semibold text-gray-900">Department Overview</h2>
-        {departmentData.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {departmentData.map((dept, index) => (
-              <div
-                key={dept.id ?? `dept-${index}`}
-                onClick={() => handleDepartmentClick(dept.id)}
-                className="bg-white rounded-lg shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-all duration-200 cursor-pointer"
-              >
-                <div className="flex items-center space-x-4">
-                  <div className="flex-shrink-0 w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center text-blue-600">
-                    <Building size={24} />
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="text-lg font-semibold text-gray-900">{dept.name}</h3>
-                    <div className="mt-2 flex space-x-4">
-                      <div className="text-gray-600">
-                        <span className="font-medium">{dept.employeeCount}</span> Employees
-                      </div>
-                      <div className="text-red-600">
-                        <span className="font-medium">{dept.onLeaveCount}</span> On Leave
+        <div className="space-y-6">
+          <h2 className="text-2xl font-semibold text-gray-900">Department Overview</h2>
+          {departmentData.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {departmentData.map((dept, index) => (
+                    <div
+                        key={dept.id ?? `dept-${index}`}
+                        onClick={() => handleDepartmentClick(dept.id)}
+                        className="bg-white rounded-lg shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-all duration-200 cursor-pointer"
+                    >
+                      <div className="flex items-center space-x-4">
+                        <div className="flex-shrink-0 w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center text-blue-600">
+                          <Building size={24} />
+                        </div>
+                        <div className="flex-1">
+                          <h3 className="text-lg font-semibold text-gray-900">{dept.name}</h3>
+                          <div className="mt-2 flex space-x-4">
+                            <div className="text-gray-600">
+                              <span className="font-medium">{dept.employeeCount}</span> Employees
+                            </div>
+                            <div className="text-red-600">
+                              <span className="font-medium">{dept.onLeaveCount}</span> On Leave
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </div>
+                ))}
               </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-gray-600 text-center py-6">No departments available.</p>
-        )}
-      </div>
+          ) : (
+              <p className="text-gray-600 text-center py-6">No departments available.</p>
+          )}
+        </div>
     );
   };
 
   const renderDashboardView = () => {
     return (
-      <div className="space-y-8">
-        <div className="bg-white rounded-lg shadow-lg p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-6">Key Metrics</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {metrics.map(metric => (
-              <div
-                key={metric.key}
-                className={`bg-white rounded-lg p-5 border-l-4 ${metric.borderColor} shadow-md hover:shadow-lg transition-all duration-200`}
-              >
-                <div className="flex items-center space-x-3">
-                  {metric.icon}
-                  <div>
-                    <div className="text-sm font-medium text-gray-600">{metric.title}</div>
-                    <div className="text-2xl font-bold text-gray-900">{metric.value}</div>
+        <div className="space-y-8">
+          <div className="bg-white rounded-lg shadow-lg p-6">
+            <h2 className="text-xl font-semibold text-gray-900 mb-6">Key Metrics</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {metrics.map(metric => (
+                  <div
+                      key={metric.key}
+                      className={`bg-white rounded-lg p-5 border-l-4 ${metric.borderColor} shadow-md hover:shadow-lg transition-all duration-200`}
+                  >
+                    <div className="flex items-center space-x-3">
+                      {metric.icon}
+                      <div>
+                        <div className="text-sm font-medium text-gray-600">{metric.title}</div>
+                        <div className="text-2xl font-bold text-gray-900">{metric.value}</div>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
-      </div>
     );
   };
 
   const renderMainContent = () => {
-
     if (isLoading) {
       return (
-        <div className="flex justify-center items-center h-64">
-          <svg className="animate-spin h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-            <path className="opacity-75" fill="currentColor" d="M12 2a10 10 0 0110 10 10 10 0 01-10 10 10 10 0 01-10-10 10 10 0 0110-10zM12 4a8 8 0 00-8 8 8 8 0 008 8 8 8 0 008-8 8 8 0 00-8-8z"></path>
-          </svg>
-        </div>
+          <div className="flex justify-center items-center h-64">
+            <svg className="animate-spin h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M12 2a10 10 0 0110 10 10 10 0 01-10 10 10 10 0 01-10-10 10 10 0 0110-10zM12 4a8 8 0 00-8 8 8 8 0 008 8 8 8 0 008-8 8 8 0 00-8-8z"></path>
+            </svg>
+          </div>
       );
     }
 
     if (error) {
       return (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-center">
-          <p className="text-sm text-red-700">{error}</p>
-        </div>
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-center">
+            <p className="text-sm text-red-700">{error}</p>
+          </div>
       );
     }
 
@@ -732,6 +912,9 @@ export default function HRDashboard() {
     if (activeView === 'department-overview') {
       return renderDepartmentOverview();
     }
+    if (activeView === 'pending-signups') {
+      return renderPendingSignups();
+    }
     return renderDashboardView();
   };
 
@@ -743,82 +926,122 @@ export default function HRDashboard() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50 flex font-sans">
-      {/* Sidebar */}
-      <div className={`fixed inset-y-0 left-0 z-30 w-64 bg-blue-900 text-white transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 transition-transform duration-300 ease-in-out shadow-lg`}>
-        <div className="flex items-center justify-between p-4 border-b border-blue-800">
-          <div className="flex items-center space-x-3">
-            <img src="/Images/bisag_logo.png" alt="BISAG-N Logo" className="h-10 w-10 rounded-full" />
-            <span className="text-xl font-semibold">BISAG-N HRMS</span>
-          </div>
-          <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden">
-            <X size={24} />
-          </button>
-        </div>
-        <nav className="p-4 space-y-2">
-          <button
-            onClick={() => setActiveView('dashboard')}
-            className={`flex items-center w-full p-3 text-left rounded-lg transition duration-200 ${
-              activeView === 'dashboard' ? 'bg-blue-800' : 'hover:bg-blue-800'
-            }`}
-          >
-            <Users size={20} className="mr-3" />
-            Dashboard
-          </button>
-          <button
-            onClick={() => setActiveView('department-overview')}
-            className={`flex items-center w-full p-3 text-left rounded-lg transition duration-200 ${
-              activeView === 'department-overview' ? 'bg-blue-800' : 'hover:bg-blue-800'
-            }`}
-          >
-            <Building size={20} className="mr-3" />
-            Department Overview
-          </button>
-          <button
-            onClick={handleLogout}
-            className="flex items-center w-full p-3 text-left rounded-lg hover:bg-red-600 transition duration-200"
-          >
-            <LogOut size={20} className="mr-3" />
-            Logout
-          </button>
-        </nav>
-      </div>
-
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col lg:ml-64">
-        <header className="bg-white shadow-lg p-4 flex items-center justify-between">
-          <div className="flex items-center">
-            <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden mr-4">
-              <Menu size={24} className="text-gray-700" />
+      <div className="min-h-screen bg-gray-50 flex font-sans">
+        <div className={`fixed inset-y-0 left-0 z-30 w-64 bg-blue-900 text-white transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 transition-transform duration-300 ease-in-out shadow-lg`}>
+          <div className="flex items-center justify-between p-4 border-b border-blue-800">
+            <div className="flex items-center space-x-3">
+              <img src="/Images/bisag_logo.png" alt="BISAG-N Logo" className="h-10 w-10 rounded-full" />
+              <span className="text-xl font-semibold">BISAG-N HRMS</span>
+            </div>
+            <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden">
+              <X size={24} />
             </button>
-            <h1 className="text-2xl font-semibold text-gray-900">HR Dashboard</h1>
           </div>
-          <div className="flex items-center space-x-4">
-            <span className="text-gray-700 font-medium">Welcome, {userData?.fullName || 'HR Manager'}</span>
-            <img src="/Images/bisag_logo.png" alt="BISAG-N Logo" className="h-8 w-8 rounded-full" />
-          </div>
-        </header>
+          <nav className="p-4 space-y-2">
+            <button
+                onClick={() => setActiveView('dashboard')}
+                className={`flex items-center w-full p-3 text-left rounded-lg transition duration-200 ${
+                    activeView === 'dashboard' ? 'bg-blue-800' : 'hover:bg-blue-800'
+                }`}
+            >
+              <Users size={20} className="mr-3" />
+              Dashboard
+            </button>
+            <button
+                onClick={() => setActiveView('department-overview')}
+                className={`flex items-center w-full p-3 text-left rounded-lg transition duration-200 ${
+                    activeView === 'department-overview' ? 'bg-blue-800' : 'hover:bg-blue-800'
+                }`}
+            >
+              <Building size={20} className="mr-3" />
+              Department Overview
+            </button>
+            <button
+                onClick={() => setActiveView('pending-signups')}
+                className={`flex items-center w-full p-3 text-left rounded-lg transition duration-200 ${
+                    activeView === 'pending-signups' ? 'bg-blue-800' : 'hover:bg-blue-800'
+                }`}
+            >
+              <FileText size={20} className="mr-3" />
+              Pending Signup Requests
+            </button>
+            <button
+                onClick={handleLogout}
+                className="flex items-center w-full p-3 text-left rounded-lg hover:bg-red-600 transition duration-200"
+            >
+              <LogOut size={20} className="mr-3" />
+              Logout
+            </button>
+          </nav>
+        </div>
 
-        <main className="flex-1 p-8">
-          {notification.message && (
-            <div className={`border rounded-lg p-4 mb-8 shadow-sm ${notification.type === 'success' ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
-              <p className="text-sm font-medium">{notification.message}</p>
+        <div className="flex-1 flex flex-col lg:ml-64">
+          <header className="bg-white shadow-lg p-4 flex items-center justify-between">
+            <div className="flex items-center">
+              <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden mr-4">
+                <Menu size={24} className="text-gray-700" />
+              </button>
+              <h1 className="text-2xl font-semibold text-gray-900">HR Dashboard</h1>
             </div>
-          )}
-          {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-8 shadow-sm">
-              <p className="text-sm text-red-800 font-medium">{error}</p>
+            <div className="flex items-center space-x-4">
+              <span className="text-gray-700 font-medium">Welcome, {userData?.fullName || 'HR Manager'}</span>
+              <img src="/Images/bisag_logo.png" alt="BISAG-N Logo" className="h-8 w-8 rounded-full" />
             </div>
-          )}
-          <div className="space-y-8">
-            {renderMainContent()}
-          </div>
-        </main>
+          </header>
 
-        <footer className="bg-blue-900 text-white py-4 text-center">
-          <p className="text-sm">© 2025 BISAG-N. All rights reserved.</p>
-        </footer>
+          <main className="flex-1 p-8">
+            {notification.message && (
+                <div className={`border rounded-lg p-4 mb-8 shadow-sm ${notification.type === 'success' ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
+                  <p className="text-sm font-medium">{notification.message}</p>
+                </div>
+            )}
+            {error && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-8 shadow-sm">
+                  <p className="text-sm text-red-800 font-medium">{error}</p>
+                </div>
+            )}
+            <div className="space-y-8">
+              {renderMainContent()}
+            </div>
+          </main>
+
+          <footer className="bg-blue-900 text-white py-4 text-center">
+            <p className="text-sm">© 2025 BISAG-N. All rights reserved.</p>
+          </footer>
+        </div>
+
+        {disapproveModal.open && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-xl">
+                <h2 className="text-lg font-semibold text-gray-900 mb-4">Disapprove Signup Request</h2>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Reason for Disapproval
+                </label>
+                <textarea
+                    value={disapproveModal.reason}
+                    onChange={(e) => setDisapproveModal({ ...disapproveModal, reason: e.target.value })}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:border-blue-900 focus:ring-1 focus:ring-blue-900"
+                    rows={4}
+                    placeholder="Enter reason for disapproval"
+                />
+                <div className="flex justify-end space-x-3 mt-4">
+                  <button
+                      onClick={() => setDisapproveModal({ open: false, userId: null, reason: '' })}
+                      className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition duration-200"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                      onClick={handleDisapproveSignup}
+                      className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition duration-200"
+                      disabled={isLoading || !disapproveModal.reason.trim()}
+                  >
+                    Disapprove
+                  </button>
+                </div>
+              </div>
+            </div>
+        )}
       </div>
-    </div>
   );
 }
