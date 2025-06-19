@@ -42,7 +42,7 @@ public class UserService implements UserDetailsService {
     private BCryptPasswordEncoder passwordEncoder;
 
     @Autowired
-    private EmailService emailService; // Add this dependency
+    private EmailService emailService;
 
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
@@ -159,6 +159,13 @@ public class UserService implements UserDetailsService {
         if (userRepository.existsByEmail(userDTO.getEmail())) {
             throw new IllegalArgumentException("Email already registered");
         }
+        if (userRepository.existsByEmployeeId(userDTO.getEmployeeId())) {
+            throw new IllegalArgumentException("Employee ID already registered");
+        }
+
+        if (userDTO.getJoinDate() == null) {
+            throw new IllegalArgumentException("Join date is required");
+        }
 
         if (!"director".equalsIgnoreCase(userDTO.getRole())) {
             if (userDTO.getDepartment() == null || userDTO.getDepartment().isBlank()) {
@@ -196,10 +203,12 @@ public class UserService implements UserDetailsService {
         user.setDepartmentEntity(departmentEntity);
         user.setRole(userDTO.getRole());
         user.setGender(userDTO.getGender());
+        user.setJoinDate(userDTO.getJoinDate());
         user.setLeaveBalance(leaveBalance);
-        user.setStatus("PENDING"); // Change to PENDING
+        user.setStatus("PENDING");
         user.setLeaveWithoutPayment(0.0);
         user.setHalfDayLwp(0.0);
+        user.setEmployeeId(userDTO.getEmployeeId());
 
         if (userDTO.getReportingToId() != null) {
             User reportingTo = userRepository.findById(userDTO.getReportingToId())

@@ -1,5 +1,9 @@
 package com.hr_management.dto;
 
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import java.time.LocalDate;
+
 public class SignupRequest {
     private String fullName;
     private String username;
@@ -8,6 +12,10 @@ public class SignupRequest {
     private String department;
     private String role;
     private String gender;
+    @NotNull(message = "Join date is required")
+    private LocalDate joinDate; // Added joinDate field to require manual input
+    @NotBlank(message = "Employee ID is required")
+    private String employeeId; // Added employeeId field to require manual input
 
     // Getters and Setters
     public String getFullName() {
@@ -64,5 +72,21 @@ public class SignupRequest {
 
     public void setGender(String gender) {
         this.gender = gender;
+    }
+
+    public LocalDate getJoinDate() {
+        return joinDate;
+    }
+
+    public void setJoinDate(LocalDate joinDate) {
+        this.joinDate = joinDate;
+    }
+
+    public String getEmployeeId() {
+        return employeeId;
+    }
+
+    public void setEmployeeId(String employeeId) {
+        this.employeeId = employeeId;
     }
 }

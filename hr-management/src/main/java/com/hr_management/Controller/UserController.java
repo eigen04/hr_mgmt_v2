@@ -13,8 +13,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.util.*;
-import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 @RestController
@@ -69,10 +67,10 @@ public class UserController {
         private String email;
         private String status;
         private String disapproveReason;
-        private String role; // New field
-        private String gender; // New field
-        private String reportingToName; // New field
-        private LocalDate joinDate; // New field
+        private String role;
+        private String gender;
+        private String reportingToName;
+        private LocalDate joinDate;
 
         public Long getId() { return id; }
         public void setId(Long id) { this.id = id; }

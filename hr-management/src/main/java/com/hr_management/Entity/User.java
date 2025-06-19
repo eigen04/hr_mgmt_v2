@@ -34,8 +34,8 @@ public class User {
     private LocalDate joinDate = LocalDate.now();
 
     @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "department_id")
-    private Department departmentEntity;
+    @JoinColumn(name = "department_id") // Maps to the department_id column in the users table
+    private Department departmentEntity; // Reference to the Department entity
 
     @Column(nullable = false)
     private String role;
@@ -44,7 +44,7 @@ public class User {
     private String gender;
 
     @Embedded
-    private LeaveBalance leaveBalance = new LeaveBalance();
+    private LeaveBalance leaveBalance = new LeaveBalance(); // Initialize with default values
 
     @Column(nullable = false)
     private String status = "PENDING";
@@ -52,10 +52,10 @@ public class User {
     @Column(name = "disapprove_reason")
     private String disapproveReason;
 
-    @Column(name = "leave_without_payment")
+    @Column(name = "leave_without_payment", nullable = false)
     private Double leaveWithoutPayment = 0.0;
 
-    @Column(name = "half_day_lwp")
+    @Column(name = "half_day_lwp", nullable = false)
     private Double halfDayLwp = 0.0;
 
     @ManyToOne
@@ -64,8 +64,11 @@ public class User {
     private User reportingTo;
 
     @OneToMany(mappedBy = "reportingTo")
-    @JsonManagedReference
+    @JsonManagedReference // Serialize subordinates, but avoid infinite recursion
     private List<User> subordinates;
+
+    @Column(name = "employee_id", nullable = false, unique = true)
+    private String employeeId;
 
     // Getters and Setters
     public Long getId() { return id; }
@@ -85,26 +88,26 @@ public class User {
         this.departmentEntity = departmentEntity;
         this.department = departmentEntity != null ? departmentEntity.getName() : null;
     }
+    public LocalDate getJoinDate() { return joinDate; }
+    public void setJoinDate(LocalDate joinDate) { this.joinDate = joinDate; }
     public String getRole() { return role; }
     public void setRole(String role) { this.role = role; }
     public String getGender() { return gender; }
     public void setGender(String gender) { this.gender = gender; }
-    public LocalDate getJoinDate() { return joinDate; }
-    public void setJoinDate(LocalDate joinDate) { this.joinDate = joinDate; }
     public LeaveBalance getLeaveBalance() { return leaveBalance; }
     public void setLeaveBalance(LeaveBalance leaveBalance) { this.leaveBalance = leaveBalance; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
     public String getDisapproveReason() { return disapproveReason; }
     public void setDisapproveReason(String disapproveReason) { this.disapproveReason = disapproveReason; }
+    public Double getLeaveWithoutPayment() { return leaveWithoutPayment; }
+    public void setLeaveWithoutPayment(Double leaveWithoutPayment) { this.leaveWithoutPayment = leaveWithoutPayment; }
+    public Double getHalfDayLwp() { return halfDayLwp; }
+    public void setHalfDayLwp(Double halfDayLwp) { this.halfDayLwp = halfDayLwp; }
     public User getReportingTo() { return reportingTo; }
     public void setReportingTo(User reportingTo) { this.reportingTo = reportingTo; }
     public List<User> getSubordinates() { return subordinates; }
     public void setSubordinates(List<User> subordinates) { this.subordinates = subordinates; }
-
-    public Double getLeaveWithoutPayment() { return leaveWithoutPayment; }
-    public void setLeaveWithoutPayment(Double leaveWithoutPayment) { this.leaveWithoutPayment = leaveWithoutPayment; }
-
-    public Double getHalfDayLwp() { return halfDayLwp; }
-    public void setHalfDayLwp(Double halfDayLwp) { this.halfDayLwp = halfDayLwp; }
+    public String getEmployeeId() { return employeeId; }
+    public void setEmployeeId(String employeeId) { this.employeeId = employeeId; }
 }

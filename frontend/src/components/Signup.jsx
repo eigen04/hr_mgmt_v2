@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { User, Mail, Lock, Building, Eye, EyeOff, Shield, ArrowRight, AlertCircle, CheckCircle } from 'lucide-react';
+import { User, Mail, Lock, Building, Eye, EyeOff, Shield, ArrowRight, AlertCircle, CheckCircle, Calendar } from 'lucide-react';
 
 export default function Signup() {
   const [formData, setFormData] = useState({
@@ -13,6 +13,8 @@ export default function Signup() {
     role: '',
     gender: '',
     reportingToId: null,
+    employeeId: '', // Added employeeId
+    joinDate: '', // Added joinDate as string to match input type="date"
   });
   const [departments, setDepartments] = useState([]);
   const [roles, setRoles] = useState([]);
@@ -169,8 +171,8 @@ export default function Signup() {
       return;
     }
 
-    if (!formData.fullName || !formData.username || !formData.email || !formData.role || !formData.gender) {
-      setNotification({ message: 'Please fill in all required fields.', type: 'error' });
+    if (!formData.fullName || !formData.username || !formData.email || !formData.role || !formData.gender || !formData.employeeId || !formData.joinDate) {
+      setNotification({ message: 'Please fill in all required fields, including Employee ID and Join Date.', type: 'error' });
       return;
     }
 
@@ -195,7 +197,9 @@ export default function Signup() {
       role: formData.role.toUpperCase(),
       gender: formData.gender,
       reportingToId: isReportingPersonRequired() ? formData.reportingToId : null,
-      status: 'PENDING', // Mark user as pending approval
+      status: 'PENDING',
+      employeeId: formData.employeeId, // Added to payload
+      joinDate: formData.joinDate, // Added to payload
     };
 
     try {
@@ -219,6 +223,8 @@ export default function Signup() {
           role: '',
           gender: '',
           reportingToId: null,
+          employeeId: '',
+          joinDate: '',
         });
         setTimeout(() => navigate('/'), 2000);
       } else {
@@ -345,6 +351,47 @@ export default function Signup() {
                         onBlur={() => setFocusedField('')}
                         className="pl-10 block w-full h-10 rounded-md border border-gray-300 bg-gray-50 text-gray-900 focus:border-blue-900 focus:ring-1 focus:ring-blue-900 transition-all duration-200"
                         placeholder="john.doe@bisag-n.gov.in"
+                        required
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label htmlFor="employeeId" className="block text-sm font-medium text-gray-700">Employee ID</label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <User size={20} className={`text-gray-400 ${focusedField === 'employeeId' ? 'text-blue-900' : ''}`} />
+                    </div>
+                    <input
+                        id="employeeId"
+                        type="text"
+                        name="employeeId"
+                        value={formData.employeeId}
+                        onChange={handleChange}
+                        onFocus={() => setFocusedField('employeeId')}
+                        onBlur={() => setFocusedField('')}
+                        className="pl-10 block w-full h-10 rounded-md border border-gray-300 bg-gray-50 text-gray-900 focus:border-blue-900 focus:ring-1 focus:ring-blue-900 transition-all duration-200"
+                        placeholder="E12345"
+                        required
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label htmlFor="joinDate" className="block text-sm font-medium text-gray-700">Join Date</label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Calendar size={20} className={`text-gray-400 ${focusedField === 'joinDate' ? 'text-blue-900' : ''}`} />
+                    </div>
+                    <input
+                        id="joinDate"
+                        type="date"
+                        name="joinDate"
+                        value={formData.joinDate}
+                        onChange={handleChange}
+                        onFocus={() => setFocusedField('joinDate')}
+                        onBlur={() => setFocusedField('')}
+                        className="pl-10 block w-full h-10 rounded-md border border-gray-300 bg-gray-50 text-gray-900 focus:border-blue-900 focus:ring-1 focus:ring-blue-900 transition-all duration-200"
                         required
                     />
                   </div>

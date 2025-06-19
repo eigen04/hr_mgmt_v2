@@ -24,6 +24,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     boolean existsByUsername(String username);
     boolean existsByEmail(String email);
+    boolean existsByEmployeeId(String employeeId);
 
     Optional<User> findByEmail(String email);
 
@@ -34,5 +35,5 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query("SELECT u FROM User u WHERE u.department = :department AND u.reportingTo.id = :reportingToId")
     List<User> findByDepartmentAndReportingToId(@Param("department") String department, @Param("reportingToId") Long reportingToId);
 
-    List<User> findByStatus(String status); // New method
+    List<User> findByStatus(String status);
 }
