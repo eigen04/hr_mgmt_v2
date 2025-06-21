@@ -45,7 +45,7 @@ public class SecurityConfig {
             return org.springframework.security.core.userdetails.User
                     .withUsername(user.getUsername())
                     .password(user.getPassword())
-                    .authorities("ROLE_" + user.getRole().toUpperCase())
+                    .authorities(user.getRole().toUpperCase()) // Use raw role (e.g., "DIRECTOR")
                     .build();
         };
     }
@@ -76,26 +76,25 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
-                        // Public endpoints
+                        // Explicitly permit OPTIONS and public endpoints
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/departments").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/roles").permitAll()
 
-                        // Director-only endpoints
+                        // Role-based restrictions
                         .requestMatchers(HttpMethod.POST, "/api/departments").hasRole("DIRECTOR")
                         .requestMatchers(HttpMethod.POST, "/api/roles").hasRole("DIRECTOR")
                         .requestMatchers(HttpMethod.GET, "/api/departments/stats").hasRole("DIRECTOR")
                         .requestMatchers(HttpMethod.GET, "/api/users/hods").hasRole("DIRECTOR")
                         .requestMatchers(HttpMethod.PATCH, "/api/users/*/status").hasRole("DIRECTOR")
-
-                        // HR-specific endpoints
-                        .requestMatchers("/api/hr/**").hasRole("HR")
+                        .requestMatchers("/api/hr/**").hasAnyRole("HR", "DIRECTOR") // Allow both HR and DIRECTOR
                         .requestMatchers(HttpMethod.GET, "/api/hr/pending-signups").hasRole("HR")
                         .requestMatchers(HttpMethod.POST, "/api/hr/approve-signup/*").hasRole("HR")
                         .requestMatchers(HttpMethod.POST, "/api/hr/disapprove-signup/*").hasRole("HR")
 
-                        // Leave endpoints for all authenticated users
+                        // Authenticated endpoints
                         .requestMatchers(HttpMethod.POST, "/api/leaves").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/leaves").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/leaves/balance").authenticated()
@@ -103,8 +102,6 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/leaves/stats").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/leaves/*/approve").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/leaves/*/reject").authenticated()
-
-                        // Authenticated endpoints
                         .requestMatchers(HttpMethod.GET, "/api/users/subordinates").authenticated()
                         .anyRequest().authenticated()
                 )

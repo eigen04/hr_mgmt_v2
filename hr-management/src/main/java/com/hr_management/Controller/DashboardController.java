@@ -1,4 +1,5 @@
 package com.hr_management.Controller;
+
 import com.hr_management.Entity.*;
 import com.hr_management.service.*;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,7 +19,7 @@ public class DashboardController {
     @GetMapping("/dashboard-metrics")
     @PreAuthorize("hasAnyRole('HR', 'DIRECTOR')")
     public ResponseEntity<DashboardMetrics> getDashboardMetrics() {
-        DashboardMetrics metrics = dashboardService.getDashboardMetrics();
+        DashboardMetrics metrics = dashboardService.getDashboardMetrics(); // Corrected typo
         return ResponseEntity.ok(metrics);
     }
 }

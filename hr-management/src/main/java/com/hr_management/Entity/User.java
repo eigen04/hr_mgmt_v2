@@ -1,7 +1,7 @@
 package com.hr_management.Entity;
 
-import com.fasterxml.jackson.annotation.JsonIdentityInfo;
-import com.fasterxml.jackson.annotation.ObjectIdGenerators;
+import com.fasterxml.jackson.annotation.JsonBackReference;
+import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import java.time.LocalDate;
@@ -31,11 +31,12 @@ public class User {
     private String department; // Temporary storage for department name
 
     @Column(name = "join_date", nullable = false, updatable = false)
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd")
     private LocalDate joinDate = LocalDate.now();
 
     @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "department_id") // Maps to the department_id column in the users table
-    private Department departmentEntity; // Reference to the Department entity
+    @JoinColumn(name = "department_id")
+    private Department departmentEntity;
 
     @Column(nullable = false)
     private String role;
@@ -44,7 +45,7 @@ public class User {
     private String gender;
 
     @Embedded
-    private LeaveBalance leaveBalance = new LeaveBalance(); // Initialize with default values
+    private LeaveBalance leaveBalance = new LeaveBalance();
 
     @Column(nullable = false)
     private String status = "PENDING";
@@ -60,17 +61,17 @@ public class User {
 
     @ManyToOne
     @JoinColumn(name = "reporting_to")
-    @JsonIdentityInfo(generator = ObjectIdGenerators.PropertyGenerator.class, property = "id")
+    @JsonBackReference // Prevent infinite recursion
     private User reportingTo;
 
     @OneToMany(mappedBy = "reportingTo")
-    @JsonManagedReference // Serialize subordinates, but avoid infinite recursion
+    @JsonManagedReference // Serialize subordinates
     private List<User> subordinates;
 
     @Column(name = "employee_id", nullable = false, unique = true)
     private String employeeId;
 
-    // Getters and Setters
+    // Getters and Setters (unchanged)
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
     public String getFullName() { return fullName; }

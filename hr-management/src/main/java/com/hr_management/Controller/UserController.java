@@ -4,7 +4,11 @@ import com.hr_management.Entity.Department;
 import com.hr_management.Entity.User;
 import com.hr_management.service.DepartmentService;
 import com.hr_management.service.UserService;
+import com.hr_management.dto.UserDTO; // Import the external UserDTO
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -19,6 +23,8 @@ import java.util.stream.Collectors;
 @RequestMapping("/api")
 public class UserController {
 
+    private static final Logger logger = LoggerFactory.getLogger(UserController.class);
+
     @Autowired
     private UserService userService;
 
@@ -26,19 +32,48 @@ public class UserController {
     private DepartmentService departmentService;
 
     @GetMapping("/users/me")
-    public ResponseEntity<User> getCurrentUser() {
-        User user = userService.getCurrentUser();
-        return ResponseEntity.ok(user);
+    public ResponseEntity<?> getCurrentUser() {
+        logger.info("Received request for /api/users/me");
+        try {
+            User user = userService.getCurrentUser();
+            UserDTO userDTO = new UserDTO();
+            userDTO.setId(user.getId());
+            userDTO.setFullName(user.getFullName());
+            userDTO.setUsername(user.getUsername());
+            userDTO.setEmail(user.getEmail());
+            userDTO.setDepartment(user.getDepartment());
+            userDTO.setRole(user.getRole());
+            userDTO.setGender(user.getGender());
+            userDTO.setJoinDate(user.getJoinDate());
+            userDTO.setEmployeeId(user.getEmployeeId());
+            userDTO.setStatus(user.getStatus());
+            userDTO.setDisapproveReason(user.getDisapproveReason());
+            if (user.getReportingTo() != null) {
+                userDTO.setReportingToId(user.getReportingTo().getId());
+                userDTO.setReportingToName(user.getReportingTo().getFullName());
+                logger.debug("ReportingTo found: ID={}, FullName={}", user.getReportingTo().getId(), user.getReportingTo().getFullName());
+            } else {
+                logger.warn("ReportingTo is null for user: {}", user.getUsername());
+            }
+            logger.debug("Returning user DTO: {}", userDTO);
+            return ResponseEntity.ok(userDTO);
+        } catch (Exception e) {
+            logger.error("Error fetching current user: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Collections.singletonMap("message", "Failed to fetch user: " + e.getMessage()));
+        }
     }
 
     @GetMapping("/departments")
     public ResponseEntity<List<Department>> getAllDepartments() {
+        logger.info("Fetching all departments");
         List<Department> departments = departmentService.getAllDepartments();
         return ResponseEntity.ok(departments);
     }
 
     @GetMapping("/departments/{id}")
     public ResponseEntity<Department> getDepartmentById(@PathVariable Long id) {
+        logger.info("Fetching department with id: {}", id);
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         String username = authentication.getName();
         User currentUser = userService.getCurrentUser();
@@ -47,12 +82,14 @@ public class UserController {
 
         Optional<Department> departmentOpt = departmentService.getDepartmentById(id);
         if (departmentOpt.isEmpty()) {
+            logger.warn("Department not found with id: {}", id);
             return ResponseEntity.status(404).body(null);
         }
         Department department = departmentOpt.get();
 
         if (userRole.equals("ASSISTANT_DIRECTOR")) {
             if (!department.getName().equals(userDepartment)) {
+                logger.warn("Access denied for user {} to department {}", username, department.getName());
                 return ResponseEntity.status(403).body(null);
             }
         }
@@ -60,61 +97,34 @@ public class UserController {
         return ResponseEntity.ok(department);
     }
 
-    class UserDTO {
-        private Long id;
-        private String fullName;
-        private String department;
-        private String email;
-        private String status;
-        private String disapproveReason;
-        private String role;
-        private String gender;
-        private String reportingToName;
-        private LocalDate joinDate;
-
-        public Long getId() { return id; }
-        public void setId(Long id) { this.id = id; }
-        public String getFullName() { return fullName; }
-        public void setFullName(String fullName) { this.fullName = fullName; }
-        public String getDepartment() { return department; }
-        public void setDepartment(String department) { this.department = department; }
-        public String getEmail() { return email; }
-        public void setEmail(String email) { this.email = email; }
-        public String getStatus() { return status; }
-        public void setStatus(String status) { this.status = status; }
-        public String getDisapproveReason() { return disapproveReason; }
-        public void setDisapproveReason(String disapproveReason) { this.disapproveReason = disapproveReason; }
-        public String getRole() { return role; }
-        public void setRole(String role) { this.role = role; }
-        public String getGender() { return gender; }
-        public void setGender(String gender) { this.gender = gender; }
-        public String getReportingToName() { return reportingToName; }
-        public void setReportingToName(String reportingToName) { this.reportingToName = reportingToName; }
-        public LocalDate getJoinDate() { return joinDate; }
-        public void setJoinDate(LocalDate joinDate) { this.joinDate = joinDate; }
-    }
-
     @GetMapping("/users/hods")
     @PreAuthorize("hasRole('DIRECTOR')")
     public ResponseEntity<List<UserDTO>> getHods() {
+        logger.info("Fetching HODs");
         try {
             List<User> hods = userService.getHods();
             List<UserDTO> hodDTOs = hods.stream().map(user -> {
                 UserDTO dto = new UserDTO();
                 dto.setId(user.getId());
                 dto.setFullName(user.getFullName());
-                dto.setDepartment(user.getDepartment());
+                dto.setUsername(user.getUsername());
                 dto.setEmail(user.getEmail());
-                dto.setStatus(user.getStatus());
-                dto.setDisapproveReason(user.getDisapproveReason());
+                dto.setDepartment(user.getDepartment());
                 dto.setRole(user.getRole());
                 dto.setGender(user.getGender());
-                dto.setReportingToName(user.getReportingTo() != null ? user.getReportingTo().getFullName() : null);
                 dto.setJoinDate(user.getJoinDate());
+                dto.setEmployeeId(user.getEmployeeId());
+                dto.setStatus(user.getStatus());
+                dto.setDisapproveReason(user.getDisapproveReason());
+                if (user.getReportingTo() != null) {
+                    dto.setReportingToId(user.getReportingTo().getId());
+                    dto.setReportingToName(user.getReportingTo().getFullName());
+                }
                 return dto;
             }).collect(Collectors.toList());
             return ResponseEntity.ok(hodDTOs);
         } catch (Exception e) {
+            logger.error("Error fetching HODs: {}", e.getMessage(), e);
             return ResponseEntity.status(500).body(Collections.emptyList());
         }
     }
@@ -122,19 +132,23 @@ public class UserController {
     @PatchMapping("/users/{id}/status")
     @PreAuthorize("hasRole('DIRECTOR')")
     public ResponseEntity<?> updateUserStatus(@PathVariable Long id, @RequestBody Map<String, String> statusUpdate) {
+        logger.info("Updating user status for id: {}", id);
         try {
             String newStatus = statusUpdate.get("status");
             userService.updateUserStatus(id, newStatus);
             return ResponseEntity.ok(Collections.singletonMap("message", "User status updated successfully"));
         } catch (RuntimeException e) {
+            logger.warn("Failed to update user status: {}", e.getMessage());
             return ResponseEntity.status(400).body(Collections.singletonMap("message", e.getMessage()));
         } catch (Exception e) {
+            logger.error("Unexpected error updating user status: {}", e.getMessage(), e);
             return ResponseEntity.status(500).body(Collections.singletonMap("message", "An error occurred: " + e.getMessage()));
         }
     }
 
     @GetMapping("/users/subordinates")
     public ResponseEntity<List<User>> getSubordinates() {
+        logger.info("Fetching subordinates for current user");
         User currentUser = userService.getCurrentUser();
         List<User> subordinates = currentUser.getSubordinates();
         return ResponseEntity.ok(subordinates);
@@ -143,24 +157,31 @@ public class UserController {
     @GetMapping("/hr/pending-signups")
     @PreAuthorize("hasRole('HR')")
     public ResponseEntity<List<UserDTO>> getPendingSignups() {
+        logger.info("Fetching pending signups");
         try {
             List<User> pendingUsers = userService.getPendingUsers();
             List<UserDTO> userDTOs = pendingUsers.stream().map(user -> {
                 UserDTO dto = new UserDTO();
                 dto.setId(user.getId());
                 dto.setFullName(user.getFullName());
-                dto.setDepartment(user.getDepartment());
+                dto.setUsername(user.getUsername());
                 dto.setEmail(user.getEmail());
-                dto.setStatus(user.getStatus());
-                dto.setDisapproveReason(user.getDisapproveReason());
+                dto.setDepartment(user.getDepartment());
                 dto.setRole(user.getRole());
                 dto.setGender(user.getGender());
-                dto.setReportingToName(user.getReportingTo() != null ? user.getReportingTo().getFullName() : null);
                 dto.setJoinDate(user.getJoinDate());
+                dto.setEmployeeId(user.getEmployeeId());
+                dto.setStatus(user.getStatus());
+                dto.setDisapproveReason(user.getDisapproveReason());
+                if (user.getReportingTo() != null) {
+                    dto.setReportingToId(user.getReportingTo().getId());
+                    dto.setReportingToName(user.getReportingTo().getFullName());
+                }
                 return dto;
             }).collect(Collectors.toList());
             return ResponseEntity.ok(userDTOs);
         } catch (Exception e) {
+            logger.error("Error fetching pending signups: {}", e.getMessage(), e);
             return ResponseEntity.status(500).body(Collections.emptyList());
         }
     }
@@ -168,12 +189,15 @@ public class UserController {
     @PostMapping("/hr/approve-signup/{userId}")
     @PreAuthorize("hasRole('HR')")
     public ResponseEntity<?> approveSignup(@PathVariable Long userId) {
+        logger.info("Approving signup for user id: {}", userId);
         try {
             userService.approveUser(userId);
             return ResponseEntity.ok(new AuthController.SuccessResponse("User approved successfully"));
         } catch (IllegalArgumentException e) {
+            logger.warn("Failed to approve signup: {}", e.getMessage());
             return ResponseEntity.badRequest().body(new AuthController.ErrorResponse(e.getMessage()));
         } catch (Exception e) {
+            logger.error("Unexpected error approving signup: {}", e.getMessage(), e);
             return ResponseEntity.status(500).body(new AuthController.ErrorResponse("An error occurred: " + e.getMessage()));
         }
     }
@@ -181,16 +205,20 @@ public class UserController {
     @PostMapping("/hr/disapprove-signup/{userId}")
     @PreAuthorize("hasRole('HR')")
     public ResponseEntity<?> disapproveSignup(@PathVariable Long userId, @RequestBody Map<String, String> request) {
+        logger.info("Disapproving signup for user id: {}", userId);
         String reason = request.get("reason");
         if (reason == null || reason.trim().isEmpty()) {
+            logger.warn("Disapproval reason is required");
             return ResponseEntity.badRequest().body(new AuthController.ErrorResponse("Reason for disapproval is required"));
         }
         try {
             userService.rejectUser(userId, reason);
             return ResponseEntity.ok(new AuthController.SuccessResponse("User disapproved successfully"));
         } catch (IllegalArgumentException e) {
+            logger.warn("Failed to disapprove signup: {}", e.getMessage());
             return ResponseEntity.badRequest().body(new AuthController.ErrorResponse(e.getMessage()));
         } catch (Exception e) {
+            logger.error("Unexpected error disapproving signup: {}", e.getMessage(), e);
             return ResponseEntity.status(500).body(new AuthController.ErrorResponse("An error occurred: " + e.getMessage()));
         }
     }

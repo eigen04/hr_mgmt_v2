@@ -39,20 +39,20 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter implements Ord
 
         String requestPath = request.getRequestURI();
         String method = request.getMethod();
+        logger.debug("Processing request: {} {}", method, requestPath);
 
-        // Allow public endpoints and OPTIONS requests
+        // Bypass public and OPTIONS requests
         if ("OPTIONS".equals(method) ||
-            requestPath.startsWith("/api/auth") ||
-            (method.equals("GET") && (requestPath.equals("/api/departments") || requestPath.equals("/api/roles")))) {
+                requestPath.startsWith("/api/auth") ||
+                (method.equals("GET") && (requestPath.equals("/api/departments") || requestPath.equals("/api/roles")))) {
             logger.debug("Bypassing JWT authentication for request: {} {}", method, requestPath);
             chain.doFilter(request, response);
             return;
         }
 
         String header = request.getHeader("Authorization");
-
         if (header == null || !header.startsWith("Bearer ")) {
-            logger.warn("Missing or invalid Authorization header for request: {} {}", method, requestPath);
+            logger.warn("Missing or invalid Authorization header for request: {} {} with header: {}", method, requestPath, header);
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             response.setContentType("application/json");
             response.getWriter().write("{\"message\": \"Missing or invalid Authorization header\"}");

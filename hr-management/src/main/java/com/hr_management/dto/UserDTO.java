@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotNull;
 import java.time.LocalDate;
 
 public class UserDTO {
+    private Long id; // Add id field
     @NotBlank
     private String fullName;
     @NotBlank
@@ -21,14 +22,18 @@ public class UserDTO {
     @NotBlank
     private String gender;
     private Long reportingToId;
-    private String status; // From first UserDTO
-    private String disapproveReason; // From first UserDTO
+    private String reportingToName; // Add reportingToName field
+    private String status;
+    private String disapproveReason;
     @NotNull(message = "Join date is required")
-    private LocalDate joinDate; // From second UserDTO
+    private LocalDate joinDate;
     @NotBlank(message = "Employee ID is required")
-    private String employeeId; // From second UserDTO
+    private String employeeId;
 
     public UserDTO() {}
+
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; } // Add this method
 
     public String getFullName() { return fullName; }
     public void setFullName(String fullName) { this.fullName = fullName; }
@@ -46,6 +51,8 @@ public class UserDTO {
     public void setGender(String gender) { this.gender = gender; }
     public Long getReportingToId() { return reportingToId; }
     public void setReportingToId(Long reportingToId) { this.reportingToId = reportingToId; }
+    public String getReportingToName() { return reportingToName; }
+    public void setReportingToName(String reportingToName) { this.reportingToName = reportingToName; } // Add this method
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
     public String getDisapproveReason() { return disapproveReason; }

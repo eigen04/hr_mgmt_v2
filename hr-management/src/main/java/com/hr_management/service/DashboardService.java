@@ -41,5 +41,5 @@ public class DashboardService {
         metrics.setProjectManagers(projectManagers);
 
         return metrics;
-    }  
+    }
 }

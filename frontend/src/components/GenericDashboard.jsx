@@ -51,6 +51,7 @@ export default function GenericDashboard() {
                 });
                 if (response.ok) {
                     const data = await response.json();
+                    console.log('User data:', data); // Debug
                     const joinDate = new Date(data.joinDate);
                     const joinYear = joinDate.getFullYear();
                     const joinMonth = joinDate.getMonth() + 1;
@@ -58,6 +59,8 @@ export default function GenericDashboard() {
                         ? Math.max(0, currentMonth - joinMonth + 1)
                         : currentMonth;
                     data.accruedCl = Math.min(12, monthsAccrued);
+                    // Restructure reportingTo based on reportingToName
+                    data.reportingTo = data.reportingToName ? { fullName: data.reportingToName } : { fullName: null };
                     setUserData(data);
 
                     const subordinatesResponse = await fetch('http://localhost:8081/api/users/subordinates', {
@@ -65,10 +68,11 @@ export default function GenericDashboard() {
                     });
                     if (subordinatesResponse.ok) {
                         const subordinatesData = await subordinatesResponse.json();
-                        console.log('Subordinates data:', subordinatesData); // Debug log
+                        console.log('Subordinates data:', subordinatesData);
                         setSubordinates(subordinatesData);
                     } else {
                         console.log('Subordinates fetch failed:', subordinatesResponse.status);
+                        setSubordinates([]);
                     }
 
                     const pendingResponse = await fetch('http://localhost:8081/api/leaves/pending', {
@@ -76,10 +80,11 @@ export default function GenericDashboard() {
                     });
                     if (pendingResponse.ok) {
                         const pendingData = await pendingResponse.json();
-                        console.log('Pending leaves data:', pendingData); // Debug log
+                        console.log('Pending leaves data:', pendingData);
                         setPendingLeaves(pendingData);
                     } else {
                         console.log('Pending leaves fetch failed:', pendingResponse.status);
+                        setPendingLeaves([]);
                     }
                 } else if (response.status === 401) {
                     setError('Session expired. Please log in again.');
@@ -483,6 +488,19 @@ export default function GenericDashboard() {
                         leaveFormData.leaveType === 'HALF_DAY_LWP',
                 }),
             });
+            console.log('Request Headers:', {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+            });
+            console.log('Request Body:', {
+                leaveType: leaveFormData.leaveType,
+                startDate: leaveFormData.startDate,
+                endDate,
+                reason: leaveFormData.reason,
+                isHalfDay: leaveFormData.leaveType === 'HALF_DAY_CL' ||
+                    leaveFormData.leaveType === 'HALF_DAY_EL' ||
+                    leaveFormData.leaveType === 'HALF_DAY_LWP',
+            });
 
             if (response.ok) {
                 const startDate = new Date(leaveFormData.startDate);
@@ -581,7 +599,7 @@ export default function GenericDashboard() {
         }
     };
 
-    const handleLeaveAction = async (leaveId, action, reason = '') => {
+    const handleLeaveAction = async (leaveId, action) => {
         setIsSubmitting(true);
         setError('');
         setSuccessMessage('');
@@ -596,17 +614,15 @@ export default function GenericDashboard() {
                 return;
             }
 
-            const response = await fetch(`http://localhost:8081/api/leaves/${action}/${leaveId}`, {
+            const response = await fetch(`http://localhost:8081/api/leaves/${leaveId}/${action}`, {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
                     Authorization: `Bearer ${token}`,
                 },
-                body: JSON.stringify({ reason }),
             });
 
             if (response.ok) {
-                setSuccessMessage(`Leave ${action}ed successfully!`);
+                setSuccessMessage(`Leave ${action}d successfully!`);
                 const pendingResponse = await fetch('http://localhost:8081/api/leaves/pending', {
                     headers: { Authorization: `Bearer ${token}` },
                 });
@@ -1186,7 +1202,7 @@ export default function GenericDashboard() {
                                 <tbody>
                                 {pendingLeaves.map((leave) => (
                                     <tr key={leave.id} className="border-b hover:bg-gray-50">
-                                        <td className="py-3 px-4">{leave.employee?.fullName || 'N/A'}</td>
+                                        <td className="py-3 px-4">{leave.userName || 'N/A'}</td>
                                         <td className="py-3 px-4">{leave.leaveType || 'N/A'}</td>
                                         <td className="py-3 px-4">{formatDate(leave.startDate)}</td>
                                         <td className="py-3 px-4">
@@ -1207,10 +1223,7 @@ export default function GenericDashboard() {
                                                     Approve
                                                 </button>
                                                 <button
-                                                    onClick={() => {
-                                                        const reason = prompt('Reason for rejection:');
-                                                        if (reason) handleLeaveAction(leave.id, 'reject', reason);
-                                                    }}
+                                                    onClick={() => handleLeaveAction(leave.id, 'reject')}
                                                     className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600"
                                                     disabled={isSubmitting}
                                                 >
@@ -1329,8 +1342,8 @@ export default function GenericDashboard() {
                             <span className="text-gray-700 font-medium">Welcome, {userData?.fullName || 'User'}</span>
                             {userData?.reportingTo?.fullName ? (
                                 <span className="text-gray-500 text-sm">
-        Reporting to: {userData.reportingTo.fullName}
-      </span>
+                    Reporting to: {userData.reportingTo.fullName}
+                </span>
                             ) : (
                                 <span className="text-gray-500 text-sm">Reporting to: Not assigned</span>
                             )}

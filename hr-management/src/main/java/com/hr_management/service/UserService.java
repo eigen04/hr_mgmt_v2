@@ -57,11 +57,19 @@ public class UserService implements UserDetailsService {
     }
 
     public User getCurrentUser() {
+        logger.info("Fetching current user");
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
-        return userRepository.findByUsername(username)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found with username: " + username));
+        logger.debug("Username from SecurityContext: {}", username);
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> {
+                    logger.error("User not found with username: {}", username);
+                    return new UsernameNotFoundException("User not found with username: " + username);
+                });
+        logger.info("Fetched user: {}", user.getUsername());
+        return user;
     }
 
+    // Other methods remain unchanged
     public String generateToken(User user) {
         return jwtUtil.generateToken(user.getUsername(), user.getRole(), user.getDepartment());
     }
@@ -153,6 +161,7 @@ public class UserService implements UserDetailsService {
     }
 
     public User signup(UserDTO userDTO) {
+        logger.info("Processing signup for username: {}", userDTO.getUsername());
         if (userRepository.existsByUsername(userDTO.getUsername())) {
             throw new IllegalArgumentException("Username already taken");
         }
@@ -216,14 +225,18 @@ public class UserService implements UserDetailsService {
             user.setReportingTo(reportingTo);
         }
 
-        return userRepository.save(user);
+        User savedUser = userRepository.save(user);
+        logger.info("User signed up successfully: {}", savedUser.getUsername());
+        return savedUser;
     }
 
     public List<User> getPendingUsers() {
+        logger.info("Fetching pending users");
         return userRepository.findByStatus("PENDING");
     }
 
     public void approveUser(Long userId) {
+        logger.info("Approving user with id: {}", userId);
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + userId));
         user.setStatus("ACTIVE");
@@ -232,6 +245,7 @@ public class UserService implements UserDetailsService {
     }
 
     public void rejectUser(Long userId, String reason) {
+        logger.info("Rejecting user with id: {}", userId);
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + userId));
         user.setStatus("REJECTED");
