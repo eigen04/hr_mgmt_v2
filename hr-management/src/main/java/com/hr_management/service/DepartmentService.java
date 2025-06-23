@@ -1,12 +1,7 @@
 package com.hr_management.service;
 
-import com.hr_management.Entity.Department;
-import com.hr_management.Entity.LeaveApplication;
-import com.hr_management.Entity.User;
-import com.hr_management.Entity.DepartmentMetrics;
-import com.hr_management.Repository.DepartmentRepository;
-import com.hr_management.Repository.LeaveApplicationRepository;
-import com.hr_management.Repository.UserRepository;
+import com.hr_management.Entity.*;
+import com.hr_management.Repository.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,17 +27,12 @@ public class DepartmentService {
     @Autowired
     private LeaveApplicationRepository leaveApplicationRepository;
 
+    @Autowired
+    private HolidayService holidayService; // New dependency
+
     // Helper method to check if a date is a working day
     private boolean isWorkingDay(LocalDate date) {
-        int dayOfWeek = date.getDayOfWeek().getValue(); // 1 (Monday) to 7 (Sunday)
-        if (dayOfWeek == 7) return false; // Sunday
-
-        int dateOfMonth = date.getDayOfMonth();
-        int weekOfMonth = (dateOfMonth - 1) / 7 + 1;
-        if (dayOfWeek == 6) { // Saturday
-            return !(weekOfMonth == 2 || weekOfMonth == 4); // Exclude second and fourth Saturdays
-        }
-        return true;
+        return !holidayService.isHoliday(date); // Use HolidayService to check for holidays
     }
 
     // Add a new department
@@ -99,7 +89,7 @@ public class DepartmentService {
                         LocalDate startDate = la.getStartDate();
                         LocalDate endDate = la.getEndDate() != null ? la.getEndDate() : startDate;
                         boolean overlapsToday = (startDate.isEqual(today) || startDate.isBefore(today)) &&
-                                               (endDate.isEqual(today) || endDate.isAfter(today));
+                                (endDate.isEqual(today) || endDate.isAfter(today));
                         if (!overlapsToday) return false;
 
                         // Apply working day logic for CASUAL, LWP, HALF_DAY_CL, HALF_DAY_LWP
@@ -189,7 +179,7 @@ public class DepartmentService {
                     LocalDate startDate = la.getStartDate();
                     LocalDate endDate = la.getEndDate() != null ? la.getEndDate() : startDate;
                     boolean overlapsToday = (startDate.isEqual(today) || startDate.isBefore(today)) &&
-                                           (endDate.isEqual(today) || endDate.isAfter(today));
+                            (endDate.isEqual(today) || endDate.isAfter(today));
                     if (!overlapsToday) return false;
 
                     // Apply working day logic for CASUAL, LWP, HALF_DAY_CL, HALF_DAY_LWP

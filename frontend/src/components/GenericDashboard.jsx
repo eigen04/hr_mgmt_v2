@@ -4,6 +4,7 @@ import { Calendar, CalendarCheck, FileText, Clock, CheckCircle, XCircle, AlertCi
 
 export default function GenericDashboard() {
     const [userData, setUserData] = useState(null);
+    const [holidays, setHolidays] = useState([]);
     const [leaveBalance, setLeaveBalance] = useState({
         casualLeave: { total: 12, used: 0, remaining: 0 },
         earnedLeave: { total: 20, used: 0, remaining: 0, usedFirstHalf: 0, usedSecondHalf: 0, carryover: 0 },
@@ -35,6 +36,7 @@ export default function GenericDashboard() {
     const EL_FIRST_HALF = 10;
     const EL_SECOND_HALF = 10;
 
+    // Consolidated useEffect for data fetching
     useEffect(() => {
         const fetchUserData = async () => {
             setIsLoading(true);
@@ -46,12 +48,12 @@ export default function GenericDashboard() {
                     return;
                 }
 
+                // Fetch user data
                 const response = await fetch('http://localhost:8081/api/users/me', {
                     headers: { Authorization: `Bearer ${token}` },
                 });
                 if (response.ok) {
                     const data = await response.json();
-                    console.log('User data:', data); // Debug
                     const joinDate = new Date(data.joinDate);
                     const joinYear = joinDate.getFullYear();
                     const joinMonth = joinDate.getMonth() + 1;
@@ -59,32 +61,41 @@ export default function GenericDashboard() {
                         ? Math.max(0, currentMonth - joinMonth + 1)
                         : currentMonth;
                     data.accruedCl = Math.min(12, monthsAccrued);
-                    // Restructure reportingTo based on reportingToName
                     data.reportingTo = data.reportingToName ? { fullName: data.reportingToName } : { fullName: null };
                     setUserData(data);
 
+                    // Fetch subordinates
                     const subordinatesResponse = await fetch('http://localhost:8081/api/users/subordinates', {
                         headers: { Authorization: `Bearer ${token}` },
                     });
                     if (subordinatesResponse.ok) {
                         const subordinatesData = await subordinatesResponse.json();
-                        console.log('Subordinates data:', subordinatesData);
                         setSubordinates(subordinatesData);
                     } else {
-                        console.log('Subordinates fetch failed:', subordinatesResponse.status);
                         setSubordinates([]);
                     }
 
+                    // Fetch pending leaves
                     const pendingResponse = await fetch('http://localhost:8081/api/leaves/pending', {
                         headers: { Authorization: `Bearer ${token}` },
                     });
                     if (pendingResponse.ok) {
                         const pendingData = await pendingResponse.json();
-                        console.log('Pending leaves data:', pendingData);
                         setPendingLeaves(pendingData);
                     } else {
-                        console.log('Pending leaves fetch failed:', pendingResponse.status);
                         setPendingLeaves([]);
+                    }
+
+                    // Fetch holidays
+                    const holidaysResponse = await fetch('http://localhost:8081/api/holidays', {
+                        headers: { Authorization: `Bearer ${token}` },
+                    });
+                    if (holidaysResponse.ok) {
+                        const holidaysData = await holidaysResponse.json();
+                        setHolidays(holidaysData.map(h => h.date));
+                    } else {
+                        console.error('Failed to fetch holidays:', holidaysResponse.status);
+                        setHolidays([]);
                     }
                 } else if (response.status === 401) {
                     setError('Session expired. Please log in again.');
@@ -94,7 +105,7 @@ export default function GenericDashboard() {
                     setError('Failed to fetch user data.');
                 }
             } catch (err) {
-                console.error('Error fetching user data:', err);
+                console.error('Error fetching data:', err);
                 setError('An error occurred. Please try again.');
             } finally {
                 setIsLoading(false);
@@ -152,13 +163,31 @@ export default function GenericDashboard() {
         fetchLeaveData();
     }, [navigate]);
 
-    // Rest of the component remains unchanged
+    // useEffect for success message timeout
     useEffect(() => {
         if (successMessage) {
             const timer = setTimeout(() => setSuccessMessage(''), 5000);
             return () => clearTimeout(timer);
         }
     }, [successMessage]);
+
+    // useEffect for leave form updates
+    useEffect(() => {
+        if (leaveFormData.startDate && (leaveFormData.leaveType === 'ML' || leaveFormData.leaveType === 'PL')) {
+            const calculatedEndDate = calculateEndDate(leaveFormData.startDate, leaveFormData.leaveType);
+            setLeaveFormData((prev) => ({ ...prev, endDate: calculatedEndDate }));
+        }
+        if (leaveFormData.startDate) {
+            const days = calculateLeaveDays(
+                leaveFormData.startDate,
+                leaveFormData.endDate,
+                leaveFormData.leaveType
+            );
+            setLeaveDays(days);
+        } else {
+            setLeaveDays(0);
+        }
+    }, [leaveFormData.startDate, leaveFormData.endDate, leaveFormData.leaveType]);
 
     const handleLogout = () => {
         localStorage.removeItem('authToken');
@@ -167,25 +196,20 @@ export default function GenericDashboard() {
     };
 
     const isNonWorkingDay = (date) => {
-        const day = new Date(date);
-        if (isNaN(day.getTime())) return false;
-        const dayOfWeek = day.getDay();
-        if (dayOfWeek === 0) return true;
-        if (dayOfWeek === 6) {
-            const dayOfMonth = day.getDate();
-            const weekOfMonth = Math.floor((dayOfMonth - 1) / 7) + 1;
-            return weekOfMonth === 2 || weekOfMonth === 4;
-        }
-        return false;
+        if (!date || isNaN(new Date(date).getTime())) return false;
+        const formattedDate = new Date(date).toISOString().split('T')[0];
+        return holidays.includes(formattedDate);
     };
 
     const calculateLeaveDays = (startDate, endDate, leaveType) => {
         const start = new Date(startDate);
         if (isNaN(start.getTime())) return 0;
+
         if (leaveType === 'HALF_DAY_CL' || leaveType === 'HALF_DAY_EL' || leaveType === 'HALF_DAY_LWP') {
             if (isNonWorkingDay(startDate)) return 0;
             return 0.5;
         }
+
         if (leaveType === 'ML') return 182;
         if (leaveType === 'PL') return 15;
         if (!endDate) return 0;
@@ -193,11 +217,16 @@ export default function GenericDashboard() {
         const end = new Date(endDate);
         if (isNaN(end.getTime())) return 0;
 
-        let currentDate = new Date(startDate);
+        if (leaveType === 'EL') {
+            return Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
+        }
+
+        let currentDate = new Date(start);
         let days = 0;
-        const countHolidays = leaveType === 'EL' || leaveType === 'ML' || leaveType === 'PL';
         while (currentDate <= end) {
-            if (countHolidays || !isNonWorkingDay(currentDate)) days += 1;
+            if (!isNonWorkingDay(currentDate)) {
+                days += 1;
+            }
             currentDate.setDate(currentDate.getDate() + 1);
         }
         return days;
@@ -257,23 +286,6 @@ export default function GenericDashboard() {
         return Math.max(0, totalClAccrued - totalUsedCl);
     };
 
-    useEffect(() => {
-        if (leaveFormData.startDate && (leaveFormData.leaveType === 'ML' || leaveFormData.leaveType === 'PL')) {
-            const calculatedEndDate = calculateEndDate(leaveFormData.startDate, leaveFormData.leaveType);
-            setLeaveFormData((prev) => ({ ...prev, endDate: calculatedEndDate }));
-        }
-        if (leaveFormData.startDate) {
-            const days = calculateLeaveDays(
-                leaveFormData.startDate,
-                leaveFormData.endDate,
-                leaveFormData.leaveType
-            );
-            setLeaveDays(days);
-        } else {
-            setLeaveDays(0);
-        }
-    }, [leaveFormData.startDate, leaveFormData.endDate, leaveFormData.leaveType]);
-
     const handleLeaveSubmit = async () => {
         setIsSubmitting(true);
         setError('');
@@ -319,7 +331,7 @@ export default function GenericDashboard() {
                 leaveFormData.leaveType === 'HALF_DAY_LWP') &&
             isNonWorkingDay(leaveFormData.startDate)
         ) {
-            setError('Half-day leave cannot be applied on a non-working day');
+            setError('Half-day leave cannot be applied on a holiday');
             setIsSubmitting(false);
             return;
         }
@@ -488,19 +500,6 @@ export default function GenericDashboard() {
                         leaveFormData.leaveType === 'HALF_DAY_LWP',
                 }),
             });
-            console.log('Request Headers:', {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${token}`,
-            });
-            console.log('Request Body:', {
-                leaveType: leaveFormData.leaveType,
-                startDate: leaveFormData.startDate,
-                endDate,
-                reason: leaveFormData.reason,
-                isHalfDay: leaveFormData.leaveType === 'HALF_DAY_CL' ||
-                    leaveFormData.leaveType === 'HALF_DAY_EL' ||
-                    leaveFormData.leaveType === 'HALF_DAY_LWP',
-            });
 
             if (response.ok) {
                 const startDate = new Date(leaveFormData.startDate);
@@ -657,19 +656,27 @@ export default function GenericDashboard() {
 
     const getStatusIcon = (status) => {
         switch (status) {
-            case 'PENDING': return <Clock className="w-5 h-5 text-yellow-500" />;
-            case 'APPROVED': return <CheckCircle className="w-5 h-5 text-green-500" />;
-            case 'REJECTED': return <XCircle className="w-5 h-5 text-red-500" />;
-            default: return <AlertCircle className="w-5 h-5 text-gray-500" />;
+            case 'PENDING':
+                return <Clock className="w-5 h-5 text-yellow-500" />;
+            case 'APPROVED':
+                return <CheckCircle className="w-5 h-5 text-green-500" />;
+            case 'REJECTED':
+                return <XCircle className="w-5 h-5 text-red-500" />;
+            default:
+                return <AlertCircle className="w-5 h-5 text-gray-500" />;
         }
     };
 
     const getStatusColor = (status) => {
         switch (status) {
-            case 'PENDING': return 'text-yellow-600 bg-yellow-50';
-            case 'APPROVED': return 'text-green-600 bg-green-50';
-            case 'REJECTED': return 'text-red-600 bg-red-50';
-            default: return 'text-gray-600 bg-gray-50';
+            case 'PENDING':
+                return 'text-yellow-600 bg-yellow-50';
+            case 'APPROVED':
+                return 'text-green-600 bg-green-50';
+            case 'REJECTED':
+                return 'text-red-600 bg-red-50';
+            default:
+                return 'text-gray-600 bg-gray-50';
         }
     };
 
@@ -728,7 +735,11 @@ export default function GenericDashboard() {
                 { label: 'Total Annual', value: leaveBalance.casualLeave.total },
                 { label: 'Accrued This Year', value: userData?.accruedCl || 0, textColor: 'text-blue-600' },
                 { label: 'Used', value: leaveBalance.casualLeave.used.toFixed(1), textColor: 'text-red-600' },
-                { label: 'Remaining', value: leaveBalance.casualLeave.remaining.toFixed(1), textColor: 'text-green-600' },
+                {
+                    label: 'Remaining',
+                    value: leaveBalance.casualLeave.remaining.toFixed(1),
+                    textColor: 'text-green-600'
+                },
             ],
             note: leaveApplications.some(app => (app.leaveType === 'CL' || app.leaveType === 'HALF_DAY_CL') &&
                 app.status === 'PENDING' && new Date(app.startDate).getMonth() + 1 > currentMonth)
@@ -745,10 +756,26 @@ export default function GenericDashboard() {
             icon: <Calendar size={24} className="text-green-500" />,
             details: [
                 { label: 'Total Annual', value: leaveBalance.earnedLeave.total },
-                { label: 'Carryover', value: leaveBalance.earnedLeave.carryover.toFixed(1), textColor: 'text-blue-600' },
-                { label: 'Used First Half', value: leaveBalance.earnedLeave.usedFirstHalf.toFixed(1), textColor: 'text-red-600' },
-                { label: 'Used Second Half', value: leaveBalance.earnedLeave.usedSecondHalf.toFixed(1), textColor: 'text-red-600' },
-                { label: 'Remaining', value: leaveBalance.earnedLeave.remaining.toFixed(1), textColor: 'text-green-600' },
+                {
+                    label: 'Carryover',
+                    value: leaveBalance.earnedLeave.carryover.toFixed(1),
+                    textColor: 'text-blue-600'
+                },
+                {
+                    label: 'Used First Half',
+                    value: leaveBalance.earnedLeave.usedFirstHalf.toFixed(1),
+                    textColor: 'text-red-600'
+                },
+                {
+                    label: 'Used Second Half',
+                    value: leaveBalance.earnedLeave.usedSecondHalf.toFixed(1),
+                    textColor: 'text-red-600'
+                },
+                {
+                    label: 'Remaining',
+                    value: leaveBalance.earnedLeave.remaining.toFixed(1),
+                    textColor: 'text-green-600'
+                },
             ],
             note: currentMonth <= 6 && leaveBalance.earnedLeave.usedSecondHalf > 0
                 ? `Pending advance EL: ${leaveBalance.earnedLeave.usedSecondHalf.toFixed(1)} days. Total EL balance after approval: ${(leaveBalance.earnedLeave.total - leaveBalance.earnedLeave.usedFirstHalf - leaveBalance.earnedLeave.usedSecondHalf).toFixed(1)} days.`
@@ -763,7 +790,11 @@ export default function GenericDashboard() {
                 details: [
                     { label: 'Total', value: leaveBalance.maternityLeave.total },
                     { label: 'Used', value: leaveBalance.maternityLeave.used.toFixed(1), textColor: 'text-red-600' },
-                    { label: 'Remaining', value: leaveBalance.maternityLeave.remaining.toFixed(1), textColor: 'text-green-600' },
+                    {
+                        label: 'Remaining',
+                        value: leaveBalance.maternityLeave.remaining.toFixed(1),
+                        textColor: 'text-green-600'
+                    },
                 ],
             }]
             : []),
@@ -776,7 +807,11 @@ export default function GenericDashboard() {
                 details: [
                     { label: 'Total', value: leaveBalance.paternityLeave.total },
                     { label: 'Used', value: leaveBalance.paternityLeave.used.toFixed(1), textColor: 'text-red-600' },
-                    { label: 'Remaining', value: leaveBalance.paternityLeave.remaining.toFixed(1), textColor: 'text-green-600' },
+                    {
+                        label: 'Remaining',
+                        value: leaveBalance.paternityLeave.remaining.toFixed(1),
+                        textColor: 'text-green-600'
+                    },
                 ],
             }]
             : []),
@@ -795,8 +830,10 @@ export default function GenericDashboard() {
         if (isLoading) {
             return (
                 <div className="flex justify-center items-center h-64">
-                    <svg className="animate-spin h-8 w-8 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <svg className="animate-spin h-8 w-8 text-blue-500" xmlns="http://www.w3.org/2000/svg"
+                         fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
                     </svg>
                 </div>
@@ -821,7 +858,8 @@ export default function GenericDashboard() {
                                     {metric.details.map((detail, index) => (
                                         <div key={index} className="flex justify-between items-center">
                                             <span className="text-gray-600">{detail.label}</span>
-                                            <span className={`font-bold text-xl ${detail.textColor || 'text-gray-900'}`}>
+                                            <span
+                                                className={`font-bold text-xl ${detail.textColor || 'text-gray-900'}`}>
                                                 {detail.value}
                                             </span>
                                         </div>
@@ -857,10 +895,12 @@ export default function GenericDashboard() {
                     {(leaveFormData.leaveType === 'CL' || leaveFormData.leaveType === 'HALF_DAY_CL') && applicationMonth > currentMonth && (
                         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
                             <p className="text-sm text-yellow-800 font-medium">
-                                Advance CL for {new Date(leaveFormData.startDate).toLocaleString('default', { month: 'long' })}: {(leaveApplications
+                                Advance CL
+                                for {new Date(leaveFormData.startDate).toLocaleString('default', { month: 'long' })}: {(leaveApplications
                                 .filter(app => (app.leaveType === 'CL' || app.leaveType === 'HALF_DAY_CL') &&
                                     (app.status === 'APPROVED' || app.status === 'PENDING'))
-                                .reduce((total, app) => total + calculateLeaveDays(app.startDate, app.endDate, app.leaveType), 0) + leaveDays).toFixed(1)} days committed.
+                                .reduce((total, app) => total + calculateLeaveDays(app.startDate, app.endDate, app.leaveType), 0) + leaveDays).toFixed(1)} days
+                                committed.
                             </p>
                         </div>
                     )}
@@ -916,14 +956,16 @@ export default function GenericDashboard() {
                                 </select>
                                 {leaveBalance[leaveTypeMap[leaveFormData.leaveType]]?.remaining <= 0 && !['EL', 'HALF_DAY_EL', 'CL', 'HALF_DAY_CL'].includes(leaveFormData.leaveType) && (
                                     <div className="text-red-600 text-sm mt-1">
-                                        No remaining {leaveFormData.leaveType.replace(/_/g, ' ').toLowerCase()} available.
+                                        No
+                                        remaining {leaveFormData.leaveType.replace(/_/g, ' ').toLowerCase()} available.
                                     </div>
                                 )}
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
                                 <div className="relative">
-                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <div
+                                        className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                         <Calendar size={18} className="text-gray-400" />
                                     </div>
                                     <input
@@ -953,7 +995,8 @@ export default function GenericDashboard() {
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
                                     <div className="relative">
-                                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                        <div
+                                            className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                             <Calendar size={18} className="text-gray-400" />
                                         </div>
                                         <input
@@ -979,7 +1022,8 @@ export default function GenericDashboard() {
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
                                     <div className="relative">
-                                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                        <div
+                                            className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                             <Calendar size={18} className="text-gray-400" />
                                         </div>
                                         <input
@@ -1039,9 +1083,12 @@ export default function GenericDashboard() {
                         >
                             {isSubmitting ? (
                                 <span className="flex items-center">
-                                    <svg className="animate-spin h-5 w-5 mr-2 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                                    <svg className="animate-spin h-5 w-5 mr-2 text-white"
+                                         xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                                strokeWidth="4"></circle>
+                                        <path className="opacity-75" fill="currentColor"
+                                              d="M4 12a8 8 0 018-8v8H4z"></path>
                                     </svg>
                                     Submitting...
                                 </span>
@@ -1059,8 +1106,10 @@ export default function GenericDashboard() {
         if (isLoading) {
             return (
                 <div className="flex justify-center items-center h-64">
-                    <svg className="animate-spin h-8 w-8 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <svg className="animate-spin h-8 w-8 text-blue-500" xmlns="http://www.w3.org/2000/svg"
+                         fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
                     </svg>
                 </div>
@@ -1098,7 +1147,8 @@ export default function GenericDashboard() {
                                                 : application.endDate ? formatDate(application.endDate) : 'N/A'}
                                         </td>
                                         <td className="py-3 px-4">
-                                            <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(application.status)}`}>
+                                            <span
+                                                className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(application.status)}`}>
                                                 {getStatusIcon(application.status)}
                                                 <span className="ml-1">{application.status || 'Unknown'}</span>
                                             </span>
@@ -1126,8 +1176,10 @@ export default function GenericDashboard() {
         if (isLoading) {
             return (
                 <div className="flex justify-center items-center h-64">
-                    <svg className="animate-spin h-8 w-8 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <svg className="animate-spin h-8 w-8 text-blue-500" xmlns="http://www.w3.org/2000/svg"
+                         fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
                     </svg>
                 </div>
@@ -1146,6 +1198,8 @@ export default function GenericDashboard() {
                                     <th className="text-left py-3 px-4 font-medium text-gray-700">Name</th>
                                     <th className="text-left py-3 px-4 font-medium text-gray-700">Role</th>
                                     <th className="text-left py-3 px-4 font-medium text-gray-700">Email</th>
+                                    <th className="text-left py-3 px-4 font-medium text-gray-700">Employee Id</th>
+                                    <th className="text-left py-3 px-4 font-medium text-gray-700">Department</th>
                                 </tr>
                                 </thead>
                                 <tbody>
@@ -1154,6 +1208,8 @@ export default function GenericDashboard() {
                                         <td className="py-3 px-4">{subordinate.fullName || 'N/A'}</td>
                                         <td className="py-3 px-4">{subordinate.role || 'N/A'}</td>
                                         <td className="py-3 px-4">{subordinate.email || 'N/A'}</td>
+                                        <td className="py-3 px-4">{subordinate.employeeId || 'N/A'}</td>
+                                        <td className="py-3 px-4">{subordinate.department || 'N/A'}</td>
                                     </tr>
                                 ))}
                                 </tbody>
@@ -1174,8 +1230,10 @@ export default function GenericDashboard() {
         if (isLoading) {
             return (
                 <div className="flex justify-center items-center h-64">
-                    <svg className="animate-spin h-8 w-8 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <svg className="animate-spin h-8 w-8 text-blue-500" xmlns="http://www.w3.org/2000/svg"
+                         fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
                     </svg>
                 </div>
@@ -1256,12 +1314,18 @@ export default function GenericDashboard() {
         }
 
         switch (activeView) {
-            case 'dashboard': return renderDashboardView();
-            case 'apply-leave': return renderApplyLeaveView();
-            case 'leave-applications': return renderLeaveApplicationsView();
-            case 'subordinates': return renderSubordinatesView();
-            case 'pending-leaves': return renderPendingLeavesView();
-            default: return renderDashboardView();
+            case 'dashboard':
+                return renderDashboardView();
+            case 'apply-leave':
+                return renderApplyLeaveView();
+            case 'leave-applications':
+                return renderLeaveApplicationsView();
+            case 'subordinates':
+                return renderSubordinatesView();
+            case 'pending-leaves':
+                return renderPendingLeavesView();
+            default:
+                return renderDashboardView();
         }
     };
 
@@ -1339,11 +1403,12 @@ export default function GenericDashboard() {
                     </div>
                     <div className="flex items-center space-x-4">
                         <div className="flex flex-col">
-                            <span className="text-gray-700 font-medium">Welcome, {userData?.fullName || 'User'}</span>
+                            <span
+                                className="text-gray-700 font-medium">Welcome, {userData?.fullName || 'User'}</span>
                             {userData?.reportingTo?.fullName ? (
                                 <span className="text-gray-500 text-sm">
-                    Reporting to: {userData.reportingTo.fullName}
-                </span>
+                                    Reporting to: {userData.reportingTo.fullName}
+                                </span>
                             ) : (
                                 <span className="text-gray-500 text-sm">Reporting to: Not assigned</span>
                             )}

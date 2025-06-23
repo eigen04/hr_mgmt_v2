@@ -13,7 +13,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
-import java.time.DayOfWeek;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,6 +31,9 @@ public class LeaveServiceImpl implements LeaveService {
 
     @Autowired
     private UserService userService;
+
+    @Autowired
+    private HolidayService holidayService;
 
     private static final double LWP_ANNUAL_LIMIT = 300.0;
     private static final double EL_FIRST_HALF = 10.0;
@@ -70,13 +72,23 @@ public class LeaveServiceImpl implements LeaveService {
                 logger.warn("User {} (gender: {}) attempted to apply for maternity leave", user.getId(), user.getGender());
                 throw new RuntimeException("Maternity leave is only available for female employees");
             }
-            application.setEndDate(application.getStartDate().plusDays(181));
+            application.setEndDate(application.getStartDate().plusDays(181)); // 182 days inclusive
+            double requiredDays = calculateRequiredDays("ML", application.getStartDate(), application.getEndDate(), false);
+            if (requiredDays != 182.0) {
+                logger.error("ML duration mismatch for user: {}, calculated: {}, expected: 182", user.getId(), requiredDays);
+                throw new RuntimeException("Maternity leave must be exactly 182 days");
+            }
         } else if (application.getLeaveType().equals("PL")) {
             if (!"MALE".equalsIgnoreCase(user.getGender())) {
                 logger.warn("User {} (gender: {}) attempted to apply for paternity leave", user.getId(), user.getGender());
                 throw new RuntimeException("Paternity leave is only available for male employees");
             }
-            application.setEndDate(application.getStartDate().plusDays(14));
+            application.setEndDate(application.getStartDate().plusDays(14)); // 15 days inclusive
+            double requiredDays = calculateRequiredDays("PL", application.getStartDate(), application.getEndDate(), false);
+            if (requiredDays != 15.0) {
+                logger.error("PL duration mismatch for user: {}, calculated: {}, expected: 15", user.getId(), requiredDays);
+                throw new RuntimeException("Paternity leave must be exactly 15 days");
+            }
         }
 
         User approver = user.getReportingTo();
@@ -113,8 +125,8 @@ public class LeaveServiceImpl implements LeaveService {
         if (application.getLeaveType().startsWith("HALF_DAY")) {
             LocalDate startDate = application.getStartDate();
             if (isNonWorkingDay(startDate)) {
-                logger.warn("User {} attempted to apply half-day leave on a non-working day: {}", user.getId(), startDate);
-                throw new RuntimeException("Half-day leave cannot be applied on a non-working day (second/fourth Saturday or Sunday)");
+                logger.warn("User {} attempted to apply half-day leave on a holiday: {}", user.getId(), startDate);
+                throw new RuntimeException("Half-day leave cannot be applied on a holiday.");
             }
             List<LeaveApplication> existingLeaves = leaveApplicationRepository.findByUserAndStartDate(user, startDate);
             boolean hasHalfDayLeave = existingLeaves.stream()
@@ -132,8 +144,10 @@ public class LeaveServiceImpl implements LeaveService {
         else if (application.getLeaveType().equals("HALF_DAY_EL")) effectiveLeaveType = "EL";
         else if (application.getLeaveType().equals("HALF_DAY_LWP")) effectiveLeaveType = "LWP";
 
-        double requiredDays = calculateRequiredDays(application.getLeaveType(), application.getStartDate(), application.getEndDate(), application.isHalfDay());
-        logger.info("Calculated required days for leave application: {}, type: {}: {}", application.getId(), application.getLeaveType(), requiredDays);
+        double requiredDays = calculateRequiredDays(application.getLeaveType(), application.getStartDate(),
+                application.getEndDate(), application.isHalfDay());
+        logger.info("Calculated required days for leave application: {}, type: {}: {}",
+                application.getId(), application.getLeaveType(), requiredDays);
 
         if (effectiveLeaveType.equals("CL")) {
             validateClApplication(user, application.getStartDate(), requiredDays, balance.get("CL"));
@@ -144,10 +158,10 @@ public class LeaveServiceImpl implements LeaveService {
         }
 
         double remainingLeaves = balance.getOrDefault(effectiveLeaveType, 0.0);
-        if (!effectiveLeaveType.equals("EL") && remainingLeaves < requiredDays) {
+        if (!effectiveLeaveType.equals("LWP") && remainingLeaves < requiredDays) {
             logger.warn("Insufficient leave balance for user: {}, type: {}, remaining: {}, required: {}",
                     user.getId(), application.getLeaveType(), remainingLeaves, requiredDays);
-            throw new RuntimeException("Insufficient " + effectiveLeaveType + " balance. Remaining: " + remainingLeaves);
+            throw new RuntimeException("Insufficient " + effectiveLeaveType + " balance. Requested: " + requiredDays);
         }
 
         if (application.getLeaveType().equals("ML")) {
@@ -376,7 +390,8 @@ public class LeaveServiceImpl implements LeaveService {
         double requiredDays = 0.0;
         if (!user.getRole().equals("ASSISTANT_DIRECTOR")) {
             LeaveBalance leaveBalance = initializeLeaveBalance(user);
-            requiredDays = calculateRequiredDays(leave.getLeaveType(), leave.getStartDate(), leave.getEndDate(), leave.isHalfDay());
+            requiredDays = calculateRequiredDays(leave.getLeaveType(), leave.getStartDate(),
+                    leave.getEndDate(), leave.isHalfDay());
 
             if (leave.getLeaveType().equals("CL") || leave.getLeaveType().equals("HALF_DAY_CL")) {
                 LocalDate currentDate = LocalDate.now();
@@ -476,13 +491,16 @@ public class LeaveServiceImpl implements LeaveService {
         int currentYear = currentDate.getYear();
         int currentMonth = currentDate.getMonthValue();
 
-        double clUsed = calculateTotalUsedDays(user, List.of("CL", "HALF_DAY_CL"), LocalDate.of(currentYear, 1, 1), currentDate);
+        double clUsed = calculateTotalUsedDays(user, List.of("CL", "HALF_DAY_CL"),
+                LocalDate.of(currentYear, 1, 1), currentDate);
         double x = calculateTotalUsedDays(user, List.of("EL", "HALF_DAY_EL"),
                 LocalDate.of(currentYear, 1, 1), LocalDate.of(currentYear, 6, 30));
         double y = calculateTotalUsedDays(user, List.of("EL", "HALF_DAY_EL"),
                 LocalDate.of(currentYear, 7, 1), LocalDate.of(currentYear, 12, 31), true);
-        double mlUsed = calculateTotalUsedDays(user, List.of("ML"));
-        double plUsed = calculateTotalUsedDays(user, List.of("PL"));
+        double mlUsed = calculateTotalUsedDays(user, List.of("ML"),
+                LocalDate.of(currentYear, 1, 1), LocalDate.of(currentYear, 12, 31));
+        double plUsed = calculateTotalUsedDays(user, List.of("PL"),
+                LocalDate.of(currentYear, 1, 1), LocalDate.of(currentYear, 12, 31));
 
         logger.info("EL balance for user {}: x (first half used)={}, y (second half used including pending)={}, month={}",
                 user.getId(), x, y, currentMonth);
@@ -580,45 +598,44 @@ public class LeaveServiceImpl implements LeaveService {
     }
 
     private double calculateRequiredDays(String leaveType, LocalDate startDate, LocalDate endDate, boolean isHalfDay) {
+        logger.info("Calculating required days for leaveType: {}, startDate: {}, endDate: {}, isHalfDay: {}",
+                leaveType, startDate, endDate, isHalfDay);
+
         if (isHalfDay) {
+            if (isNonWorkingDay(startDate)) {
+                logger.warn("Half-day leave requested on holiday: {}", startDate);
+                return 0.0;
+            }
             return 0.5;
         }
 
-        if (leaveType.equals("ML")) {
-            return 182.0;
-        } else if (leaveType.equals("PL")) {
-            return 15.0;
-        }
-
         if (startDate == null || endDate == null) {
+            logger.warn("Invalid dates provided: startDate={}, endDate={}", startDate, endDate);
             return 0.0;
         }
 
-        boolean excludeNonWorkingDays = leaveType.equals("CL") || leaveType.equals("LWP");
+        // For EL, ML, PL: count all days including holidays (sandwich leave rule)
+        if (leaveType.equals("EL") || leaveType.equals("ML") || leaveType.equals("PL")) {
+            long totalDays = startDate.datesUntil(endDate.plusDays(1)).count();
+            logger.info("{} leave: counted {} days including holidays (sandwich rule)", leaveType, totalDays);
+            return (double) totalDays;
+        }
+
+        // For CL and LWP: exclude holidays
         double totalDays = 0.0;
         LocalDate currentDate = startDate;
-
         while (!currentDate.isAfter(endDate)) {
-            if (!excludeNonWorkingDays || !isNonWorkingDay(currentDate)) {
+            if (!isNonWorkingDay(currentDate)) {
                 totalDays += 1.0;
             }
             currentDate = currentDate.plusDays(1);
         }
-
+        logger.info("Non-EL/ML/PL leave ({}): counted {} days, excluding holidays", leaveType, totalDays);
         return totalDays;
     }
 
     private boolean isNonWorkingDay(LocalDate date) {
-        DayOfWeek dayOfWeek = date.getDayOfWeek();
-        if (dayOfWeek == DayOfWeek.SUNDAY) {
-            return true;
-        }
-        if (dayOfWeek == DayOfWeek.SATURDAY) {
-            int dayOfMonth = date.getDayOfMonth();
-            int weekOfMonth = ((dayOfMonth - 1) / 7) + 1;
-            return weekOfMonth == 2 || weekOfMonth == 4;
-        }
-        return false;
+        return holidayService.isHoliday(date);
     }
 
     private Map<String, Double> calculateLeaveBalance(User user) {
@@ -626,7 +643,8 @@ public class LeaveServiceImpl implements LeaveService {
         LocalDate currentDate = LocalDate.now();
         balance.put("CL", calculateAvailableCl(user, currentDate));
         balance.put("EL", calculateAvailableEl(user, currentDate));
-        balance.put("LWP", LWP_ANNUAL_LIMIT - calculateTotalUsedDays(user, List.of("LWP", "HALF_DAY_LWP"), LocalDate.of(currentDate.getYear(), 1, 1), currentDate));
+        balance.put("LWP", LWP_ANNUAL_LIMIT - calculateTotalUsedDays(user, List.of("LWP", "HALF_DAY_LWP"),
+                LocalDate.of(currentDate.getYear(), 1, 1), currentDate));
         if ("FEMALE".equalsIgnoreCase(user.getGender())) {
             balance.put("ML", 182.0 - calculateTotalUsedDays(user, List.of("ML")));
         } else {

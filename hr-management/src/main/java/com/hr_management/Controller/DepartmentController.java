@@ -96,7 +96,7 @@ public class DepartmentController {
     }
 
     @GetMapping("/hr/departments/{deptId}/employees")
-    @PreAuthorize("hasAnyRole('HR', 'DIRECTOR', 'ASSISTANT_DIRECTOR', 'PROJECT_MANAGER')")
+    @PreAuthorize("hasAnyRole('HR', 'DIRECTOR')")
     public ResponseEntity<List<EmployeeDTO>> getEmployeesInDepartment(@PathVariable Long deptId) {
         try {
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -111,13 +111,6 @@ public class DepartmentController {
             Optional<Department> departmentOpt = departmentService.getDepartmentById(deptId);
             if (departmentOpt.isEmpty()) {
                 return ResponseEntity.status(404).body(List.of());
-            }
-
-            // Restrict access for ASSISTANT_DIRECTOR and PROJECT_MANAGER to their own department
-            if (userRole.equals("ASSISTANT_DIRECTOR") || userRole.equals("PROJECT_MANAGER")) {
-                if (userDepartmentId == null || !userDepartmentId.equals(deptId)) {
-                    return ResponseEntity.status(403).body(List.of());
-                }
             }
 
             // Fetch employees, filtered by reportingTo for PROJECT_MANAGER

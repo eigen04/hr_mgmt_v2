@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, Clock, CheckCircle, AlertCircle, Building, Menu, X, LogOut, Download, ChevronLeft, ChevronRight, FileText } from 'lucide-react';
+import { Users, Clock, CheckCircle, AlertCircle, Building, Menu, X, LogOut, Download, ChevronLeft, ChevronRight, FileText, UserPlus, Calendar } from 'lucide-react';
 import ExcelJS from 'exceljs';
 
 export default function HRDashboard() {
@@ -18,12 +18,21 @@ export default function HRDashboard() {
   const [departmentData, setDepartmentData] = useState([]);
   const [employeesInDepartment, setEmployeesInDepartment] = useState([]);
   const [pendingSignups, setPendingSignups] = useState([]);
-  const [disapproveModal, setDisapproveModal] = useState({ open: false, userId: null, reason: '' }); // New state for modal
+  const [disapproveModal, setDisapproveModal] = useState({ open: false, userId: null, reason: '' });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [activeView, setActiveView] = useState('dashboard');
   const [notification, setNotification] = useState({ message: '', type: '' });
+  const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
+  const [isDeptModalOpen, setIsDeptModalOpen] = useState(false);
+  const [newRole, setNewRole] = useState('');
+  const [newDept, setNewDept] = useState('');
+  const [roles, setRoles] = useState([]);
+  // New state for holidays
+  const [holidays, setHolidays] = useState([]);
+  const [isHolidayModalOpen, setIsHolidayModalOpen] = useState(false);
+  const [newHoliday, setNewHoliday] = useState({ name: '', date: '', type: 'CUSTOM' });
 
   useEffect(() => {
     const token = localStorage.getItem('authToken');
@@ -166,9 +175,47 @@ export default function HRDashboard() {
       }
     };
 
+    const fetchRoles = async () => {
+      try {
+        const response = await fetch('http://localhost:8081/api/roles', {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (response.ok) {
+          setRoles(await response.json());
+        } else {
+          setError('Failed to fetch roles');
+        }
+      } catch (error) {
+        console.error('Error fetching roles:', error);
+        setError('Failed to fetch roles.');
+      }
+    };
+
+    const fetchHolidays = async () => {
+      try {
+        setIsLoading(true);
+        const response = await fetch('http://localhost:8081/api/hr/holidays', {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setHolidays(data);
+        } else {
+          setError('Failed to fetch holidays');
+        }
+      } catch (error) {
+        console.error('Error fetching holidays:', error);
+        setError('Failed to fetch holidays.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
     fetchUserData();
     fetchDepartmentData();
     fetchDashboardData();
+    fetchRoles();
+    fetchHolidays();
     if (activeView === 'pending-signups') {
       fetchPendingSignups();
     }
@@ -180,6 +227,14 @@ export default function HRDashboard() {
       return () => clearTimeout(timer);
     }
   }, [notification]);
+
+  // Helper to check if a date is a holiday
+  const isNonHoliday = (dateStr) => {
+    if (!dateStr || typeof dateStr !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      return false;
+    }
+    return !holidays.some(holiday => holiday.date === dateStr);
+  };
 
   const handleApproveSignup = async (userId) => {
     const token = localStorage.getItem('authToken');
@@ -238,6 +293,150 @@ export default function HRDashboard() {
     } catch (error) {
       console.error('Error disapproving signup:', error);
       setNotification({ message: 'Failed to disapprove user.', type: 'error' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleAddRole = async (e) => {
+    e.preventDefault();
+    if (!newRole.trim()) {
+      setNotification({ message: 'Role name is required', type: 'error' });
+      return;
+    }
+    try {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        setNotification({ message: 'Session expired. Please log in again.', type: 'error' });
+        navigate('/');
+        return;
+      }
+      const response = await fetch('http://localhost:8081/api/roles', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ name: newRole.trim() }),
+      });
+      if (response.ok) {
+        const addedRole = await response.json();
+        setRoles([...roles, { id: addedRole.id, name: addedRole.name }]);
+        setNewRole('');
+        setIsRoleModalOpen(false);
+        setNotification({ message: 'Role added successfully', type: 'success' });
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        setNotification({ message: `Failed to add role: ${errorData.message || 'Unknown error'}`, type: 'error' });
+      }
+    } catch (error) {
+      console.error('Error adding role:', error);
+      setNotification({ message: 'Failed to add role.', type: 'error' });
+    }
+  };
+
+  const handleAddDept = async (e) => {
+    e.preventDefault();
+    if (!newDept.trim()) {
+      setNotification({ message: 'Department name is required', type: 'error' });
+      return;
+    }
+    try {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        setNotification({ message: 'Session expired. Please log in again.', type: 'error' });
+        navigate('/');
+        return;
+      }
+      const response = await fetch('http://localhost:8081/api/departments', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ name: newDept.trim() }),
+      });
+      if (response.ok) {
+        const addedDept = await response.json();
+        setDepartmentData([
+          ...departmentData,
+          {
+            id: addedDept.id,
+            name: addedDept.name,
+            description: addedDept.description || '',
+            employeeCount: addedDept.employeeCount || 0,
+            onLeaveCount: addedDept.onLeaveCount || 0,
+          },
+        ]);
+        setNewDept('');
+        setIsDeptModalOpen(false);
+        setNotification({ message: 'Department added successfully', type: 'success' });
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        setNotification({ message: `Failed to add department: ${errorData.message || 'Unknown error'}`, type: 'error' });
+      }
+    } catch (error) {
+      console.error('Error adding department:', error);
+      setNotification({ message: 'Failed to add department.', type: 'error' });
+    }
+  };
+
+  const handleAddHoliday = async (e) => {
+    e.preventDefault();
+    if (!newHoliday.name.trim() || !newHoliday.date) {
+      setNotification({ message: 'Holiday name and date are required', type: 'error' });
+      return;
+    }
+    try {
+      const token = localStorage.getItem('authToken');
+      const response = await fetch('http://localhost:8081/api/hr/holidays', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: newHoliday.name.trim(),
+          date: newHoliday.date,
+          type: newHoliday.type,
+        }),
+      });
+      if (response.ok) {
+        const addedHoliday = await response.json();
+        setHolidays([...holidays, addedHoliday]);
+        setNewHoliday({ name: '', date: '', type: 'CUSTOM' });
+        setIsHolidayModalOpen(false);
+        setNotification({ message: 'Holiday added successfully', type: 'success' });
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        setNotification({ message: `Failed to add holiday: ${errorData.message || 'Unknown error'}`, type: 'error' });
+      }
+    } catch (error) {
+      console.error('Error adding holiday:', error);
+      setNotification({ message: 'Failed to add holiday.', type: 'error' });
+    }
+  };
+
+  const handleDeleteHoliday = async (holidayId) => {
+    const token = localStorage.getItem('authToken');
+    try {
+      setIsLoading(true);
+      const response = await fetch(`http://localhost:8081/api/hr/holidays/${holidayId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      if (response.ok) {
+        setHolidays(holidays.filter(h => h.id !== holidayId));
+        setNotification({ message: 'Holiday deleted successfully', type: 'success' });
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        setNotification({ message: `Failed to delete holiday: ${errorData.message || 'Unknown error'}`, type: 'error' });
+      }
+    } catch (error) {
+      console.error('Error deleting holiday:', error);
+      setNotification({ message: 'Failed to delete holiday.', type: 'error' });
     } finally {
       setIsLoading(false);
     }
@@ -307,7 +506,7 @@ export default function HRDashboard() {
             const dates = getDatesInRange(app.startDate, app.endDate);
             dates.forEach(date => {
               if (['CL', 'LWP', 'HALF_DAY_CL', 'HALF_DAY_LWP'].includes(leaveType)) {
-                if (isWorkingDay(date)) {
+                if (isNonHoliday(date)) {
                   uniqueDates.add(date);
                 }
               } else {
@@ -350,22 +549,6 @@ export default function HRDashboard() {
     }
   };
 
-  const isWorkingDay = (dateStr) => {
-    if (!dateStr || typeof dateStr !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-      return false;
-    }
-    const date = new Date(dateStr);
-    if (isNaN(date.getTime())) {
-      return false;
-    }
-    const day = date.getDay();
-    const dateOfMonth = date.getDate();
-    const weekOfMonth = Math.floor((dateOfMonth - 1) / 7) + 1;
-    if (day === 0) return false;
-    if (day === 6) return !(weekOfMonth === 2 || weekOfMonth === 4);
-    return true;
-  };
-
   const handleExportExcel = async (deptId) => {
     const dept = departmentData.find(d => d.id === deptId);
     if (!dept || !employeesInDepartment.length) {
@@ -384,8 +567,8 @@ export default function HRDashboard() {
           const filteredLeaves = leaves.filter(leave => {
             if (!leave || !leave.date || !leave.leaveType) return false;
             const isInMonth = monthRegex.test(leave.date);
-            const shouldCheckWorkingDay = ['CL', 'HALF_DAY_CL', 'LWP', 'HALF_DAY_LWP'].includes(leaveType);
-            const isValidDay = shouldCheckWorkingDay ? isWorkingDay(leave.date) : true;
+            const shouldCheckHoliday = ['CL', 'HALF_DAY_CL', 'LWP', 'HALF_DAY_LWP'].includes(leaveType);
+            const isValidDay = shouldCheckHoliday ? isNonHoliday(leave.date) : true;
             return isInMonth && isValidDay;
           });
           return filteredLeaves.reduce((total, leave) => {
@@ -494,13 +677,14 @@ export default function HRDashboard() {
     const calendarDays = [];
 
     for (let i = 0; i < firstDayOfMonth; i++) {
-      calendarDays.push({ day: null, leaveType: null, isHalfDay: false });
+      calendarDays.push({ day: null, leaveType: null, isHalfDay: false, isHoliday: false });
     }
 
     for (let day = 1; day <= daysInMonth; day++) {
       const date = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
       let leaveType = null;
       let isHalfDay = false;
+      const isHoliday = holidays.some(holiday => holiday.date === date);
 
       const clLeave = selectedEmployee.leaves.cl?.find(leave => leave.date === date);
       const elLeave = selectedEmployee.leaves.el?.find(leave => leave.date === date);
@@ -537,7 +721,7 @@ export default function HRDashboard() {
         isHalfDay = paternityLeave.isHalfDay;
       }
 
-      calendarDays.push({ day, leaveType, isHalfDay });
+      calendarDays.push({ day, leaveType, isHalfDay, isHoliday });
     }
 
     return calendarDays;
@@ -548,7 +732,8 @@ export default function HRDashboard() {
     const monthName = currentMonth.toLocaleString('default', { month: 'long' });
     const year = currentMonth.getFullYear();
 
-    const getLeaveColor = (type, isHalfDay) => {
+    const getLeaveColor = (type, isHalfDay, isHoliday) => {
+      if (isHoliday) return 'bg-purple-200 border-purple-500 text-red-900';
       switch (type) {
         case 'cl': return 'bg-yellow-200 border-yellow-500 text-yellow-900';
         case 'el': return 'bg-green-200 border-green-500 text-green-900';
@@ -562,7 +747,11 @@ export default function HRDashboard() {
       }
     };
 
-    const getLeaveTooltip = (type, isHalfDay) => {
+    const getLeaveTooltip = (type, isHalfDay, isHoliday) => {
+      if (isHoliday) {
+        const holiday = holidays.find(h => h.date === `${year}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}-${String(calendarDays.find(d => d.isHoliday)?.day).padStart(2, '0')}`);
+        return holiday ? holiday.name : 'Holiday';
+      }
       switch (type) {
         case 'cl': return 'Casual Leave';
         case 'el': return 'Earned Leave';
@@ -577,6 +766,7 @@ export default function HRDashboard() {
     };
 
     const leaveTypes = [
+      { type: 'holiday', label: 'Holiday', bgColor: 'bg-purple-200', borderColor: 'border-purple-500' },
       { type: 'cl', label: 'Casual Leave', bgColor: 'bg-yellow-200', borderColor: 'border-yellow-500' },
       { type: 'el', label: 'Earned Leave', bgColor: 'bg-green-200', borderColor: 'border-green-500' },
       { type: 'lwp', label: 'Leave Without Pay', bgColor: 'bg-gray-200', borderColor: 'border-gray-500' },
@@ -620,9 +810,9 @@ export default function HRDashboard() {
                 <div
                     key={day.day ? `${year}-${monthName}-${day.day}` : `empty-${index}`}
                     className={`aspect-square flex items-center justify-center border rounded-sm text-sm font-medium transition-all duration-200 ${
-                        day.day ? getLeaveColor(day.leaveType, day.isHalfDay) : 'bg-gray-100'
-                    } ${day.day && (day.leaveType || day.isHalfDay) ? 'cursor-help' : ''}`}
-                    title={day.day && (day.leaveType || day.isHalfDay) ? getLeaveTooltip(day.leaveType, day.isHalfDay) : ''}
+                        day.day ? getLeaveColor(day.leaveType, day.isHalfDay, day.isHoliday) : 'bg-gray-100'
+                    } ${day.day && (day.leaveType || day.isHalfDay || day.isHoliday) ? 'cursor-help' : ''}`}
+                    title={day.day && (day.leaveType || day.isHalfDay || day.isHoliday) ? getLeaveTooltip(day.leaveType, day.isHalfDay, day.isHoliday) : ''}
                 >
                   {day.day || ''}
                 </div>
@@ -636,6 +826,66 @@ export default function HRDashboard() {
                 </div>
             ))}
           </div>
+        </div>
+    );
+  };
+
+  const renderHolidayView = () => {
+    // Sort holidays by date (YYYY-MM-DD) in ascending order
+    const sortedHolidays = [...holidays].sort((a, b) => {
+      return new Date(a.date) - new Date(b.date);
+    });
+
+    return (
+        <div className="space-y-6">
+          <div className="flex justify-between items-center">
+            <h2 className="text-2xl font-semibold text-gray-900">Holiday Management</h2>
+            <button
+                onClick={() => setIsHolidayModalOpen(true)}
+                className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition duration-200"
+            >
+              <Calendar size={16} />
+              <span>Add Holiday</span>
+            </button>
+          </div>
+          {sortedHolidays.length === 0 && !isLoading ? (
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center">
+                <p className="text-sm text-gray-700">No holidays defined.</p>
+              </div>
+          ) : (
+              <div className="bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider">Name</th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider">Date</th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider">Type</th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
+                    </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                    {sortedHolidays.map(holiday => (
+                        <tr key={holiday.id} className="hover:bg-gray-50 transition duration-150">
+                          <td className="px-6 py-4 whitespace-nowrap text-gray-900">{holiday.name}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-gray-600">{holiday.date}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-gray-600">{holiday.type}</td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <button
+                                onClick={() => handleDeleteHoliday(holiday.id)}
+                                className="text-red-600 hover:text-red-800 font-medium transition duration-200"
+                                disabled={isLoading}
+                            >
+                              Delete
+                            </button>
+                          </td>
+                        </tr>
+                    ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+          )}
         </div>
     );
   };
@@ -879,6 +1129,88 @@ export default function HRDashboard() {
               ))}
             </div>
           </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="bg-white rounded-lg shadow-lg p-6">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-semibold text-gray-900">Manage Roles</h3>
+                <button
+                    onClick={() => setIsRoleModalOpen(true)}
+                    className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition duration-200"
+                >
+                  <UserPlus size={16} />
+                  <span>Add Role</span>
+                </button>
+              </div>
+              {isLoading ? (
+                  <div className="text-center py-6">
+                    <p className="text-gray-600">Loading...</p>
+                  </div>
+              ) : roles.length === 0 ? (
+                  <div className="text-center py-6">
+                    <p className="text-gray-600">No roles available. Add a role to get started.</p>
+                  </div>
+              ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                      <tr className="border-b border-gray-200">
+                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600 uppercase tracking-wider">ID</th>
+                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600 uppercase tracking-wider">Role Name</th>
+                      </tr>
+                      </thead>
+                      <tbody>
+                      {roles.map((role) => (
+                          <tr key={role.id} className="border-b border-gray-200 hover:bg-gray-50 transition duration-150">
+                            <td className="py-3 px-4 text-gray-700">{role.id}</td>
+                            <td className="py-3 px-4 text-gray-700">{role.name}</td>
+                          </tr>
+                      ))}
+                      </tbody>
+                    </table>
+                  </div>
+              )}
+            </div>
+            <div className="bg-white rounded-lg shadow-lg p-6">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-semibold text-gray-900">Manage Departments</h3>
+                <button
+                    onClick={() => setIsDeptModalOpen(true)}
+                    className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition duration-200"
+                >
+                  <Building size={16} />
+                  <span>Add Department</span>
+                </button>
+              </div>
+              {isLoading ? (
+                  <div className="text-center py-6">
+                    <p className="text-gray-600">Loading...</p>
+                  </div>
+              ) : departmentData.length === 0 ? (
+                  <div className="text-center py-6">
+                    <p className="text-gray-600">No departments available. Add a department to get started.</p>
+                  </div>
+              ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                      <tr className="border-b border-gray-200">
+                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600 uppercase tracking-wider">ID</th>
+                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600 uppercase tracking-wider">Department Name</th>
+                      </tr>
+                      </thead>
+                      <tbody>
+                      {departmentData.map((dept) => (
+                          <tr key={dept.id} className="border-b border-gray-200 hover:bg-gray-50 transition duration-150">
+                            <td className="py-3 px-4 text-gray-700">{dept.id}</td>
+                            <td className="py-3 px-4 text-gray-700">{dept.name}</td>
+                          </tr>
+                      ))}
+                      </tbody>
+                    </table>
+                  </div>
+              )}
+            </div>
+          </div>
         </div>
     );
   };
@@ -914,6 +1246,9 @@ export default function HRDashboard() {
     }
     if (activeView === 'pending-signups') {
       return renderPendingSignups();
+    }
+    if (activeView === 'holidays') {
+      return renderHolidayView();
     }
     return renderDashboardView();
   };
@@ -966,6 +1301,29 @@ export default function HRDashboard() {
               Pending Signup Requests
             </button>
             <button
+                onClick={() => setActiveView('holidays')}
+                className={`flex items-center w-full p-3 text-left rounded-lg transition duration-200 ${
+                    activeView === 'holidays' ? 'bg-blue-800' : 'hover:bg-blue-800'
+                }`}
+            >
+              <Calendar size={20} className="mr-3" />
+              Manage Holidays
+            </button>
+            <button
+                onClick={() => setIsRoleModalOpen(true)}
+                className="flex items-center w-full p-3 text-left rounded-lg hover:bg-blue-800 transition duration-200"
+            >
+              <UserPlus size={20} className="mr-3" />
+              Add Role
+            </button>
+            <button
+                onClick={() => setIsDeptModalOpen(true)}
+                className="flex items-center w-full p-3 text-left rounded-lg hover:bg-blue-800 transition duration-200"
+            >
+              <Building size={20} className="mr-3" />
+              Add Department
+            </button>
+            <button
                 onClick={handleLogout}
                 className="flex items-center w-full p-3 text-left rounded-lg hover:bg-red-600 transition duration-200"
             >
@@ -997,7 +1355,7 @@ export default function HRDashboard() {
             )}
             {error && (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-8 shadow-sm">
-                  <p className="text-sm text-red-800 font-medium">{error}</p>
+                  <p className="text-sm text-red-700 font-medium">{error}</p>
                 </div>
             )}
             <div className="space-y-8">
@@ -1039,6 +1397,147 @@ export default function HRDashboard() {
                     Disapprove
                   </button>
                 </div>
+              </div>
+            </div>
+        )}
+
+        {isRoleModalOpen && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-xl">
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-xl font-semibold text-gray-900">Add New Role</h3>
+                  <button onClick={() => setIsRoleModalOpen(false)} className="text-gray-500 hover:text-gray-700 transition duration-200">
+                    <X size={20} />
+                  </button>
+                </div>
+                <form onSubmit={handleAddRole}>
+                  <div className="mb-6">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Role Name</label>
+                    <input
+                        type="text"
+                        value={newRole}
+                        onChange={(e) => setNewRole(e.target.value)}
+                        className="block w-full rounded-md border border-gray-300 py-2 px-3 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition duration-200"
+                        placeholder="e.g., Senior Developer"
+                    />
+                  </div>
+                  <div className="flex justify-end space-x-3">
+                    <button
+                        type="button"
+                        onClick={() => setIsRoleModalOpen(false)}
+                        className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition duration-200"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                        type="submit"
+                        className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition duration-200"
+                    >
+                      Add Role
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+        )}
+
+        {isDeptModalOpen && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-xl">
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-xl font-semibold text-gray-900">Add New Department</h3>
+                  <button onClick={() => setIsDeptModalOpen(false)} className="text-gray-500 hover:text-gray-700 transition duration-200">
+                    <X size={20} />
+                  </button>
+                </div>
+                <form onSubmit={handleAddDept}>
+                  <div className="mb-6">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Department Name</label>
+                    <input
+                        type="text"
+                        value={newDept}
+                        onChange={(e) => setNewDept(e.target.value)}
+                        className="block w-full rounded-md border border-gray-300 py-2 px-3 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition duration-200"
+                        placeholder="e.g., Research & Development"
+                    />
+                  </div>
+                  <div className="flex justify-end space-x-3">
+                    <button
+                        type="button"
+                        onClick={() => setIsDeptModalOpen(false)}
+                        className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition duration-200"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                        type="submit"
+                        className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition duration-200"
+                    >
+                      Add Department
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+        )}
+
+        {isHolidayModalOpen && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-xl">
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-xl font-semibold text-gray-900">Add New Holiday</h3>
+                  <button onClick={() => setIsHolidayModalOpen(false)} className="text-gray-500 hover:text-gray-700 transition duration-200">
+                    <X size={20} />
+                  </button>
+                </div>
+                <form onSubmit={handleAddHoliday}>
+                  <div className="mb-6">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Holiday Name</label>
+                    <input
+                        type="text"
+                        value={newHoliday.name}
+                        onChange={(e) => setNewHoliday({ ...newHoliday, name: e.target.value })}
+                        className="block w-full rounded-md border border-gray-300 py-2 px-3 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition duration-200"
+                        placeholder="e.g., Diwali"
+                    />
+                  </div>
+                  <div className="mb-6">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
+                    <input
+                        type="date"
+                        value={newHoliday.date}
+                        onChange={(e) => setNewHoliday({ ...newHoliday, date: e.target.value })}
+                        className="block w-full rounded-md border border-gray-300 py-2 px-3 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition duration-200"
+                    />
+                  </div>
+                  <div className="mb-6">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Type</label>
+                    <select
+                        value={newHoliday.type}
+                        onChange={(e) => setNewHoliday({ ...newHoliday, type: e.target.value })}
+                        className="block w-full rounded-md border border-gray-300 py-2 px-3 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition duration-200"
+                    >
+                      <option value="CUSTOM">Custom</option>
+                      <option value="SUNDAY">Sunday</option>
+                      <option value="SATURDAY_2_4">2nd/4th Saturday</option>
+                    </select>
+                  </div>
+                  <div className="flex justify-end space-x-3">
+                    <button
+                        type="button"
+                        onClick={() => setIsHolidayModalOpen(false)}
+                        className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition duration-200"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                        type="submit"
+                        className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition duration-200"
+                    >
+                      Add Holiday
+                    </button>
+                  </div>
+                </form>
               </div>
             </div>
         )}

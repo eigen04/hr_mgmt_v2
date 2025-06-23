@@ -45,7 +45,7 @@ public class SecurityConfig {
             return org.springframework.security.core.userdetails.User
                     .withUsername(user.getUsername())
                     .password(user.getPassword())
-                    .authorities(user.getRole().toUpperCase()) // Use raw role (e.g., "DIRECTOR")
+                    .authorities(user.getRole().toUpperCase())
                     .build();
         };
     }
@@ -82,18 +82,18 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/departments").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/roles").permitAll()
-
+                        // New holiday endpoints
+                        .requestMatchers("/api/hr/holidays/**").hasAnyRole("HR", "DIRECTOR")
                         // Role-based restrictions
-                        .requestMatchers(HttpMethod.POST, "/api/departments").hasRole("DIRECTOR")
-                        .requestMatchers(HttpMethod.POST, "/api/roles").hasRole("DIRECTOR")
+                        .requestMatchers(HttpMethod.POST, "/api/departments").hasAnyRole("DIRECTOR", "HR")
+                        .requestMatchers(HttpMethod.POST, "/api/roles").hasAnyRole("DIRECTOR", "HR")
                         .requestMatchers(HttpMethod.GET, "/api/departments/stats").hasRole("DIRECTOR")
                         .requestMatchers(HttpMethod.GET, "/api/users/hods").hasRole("DIRECTOR")
                         .requestMatchers(HttpMethod.PATCH, "/api/users/*/status").hasRole("DIRECTOR")
-                        .requestMatchers("/api/hr/**").hasAnyRole("HR", "DIRECTOR") // Allow both HR and DIRECTOR
+                        .requestMatchers("/api/hr/**").hasAnyRole("HR", "DIRECTOR")
                         .requestMatchers(HttpMethod.GET, "/api/hr/pending-signups").hasRole("HR")
                         .requestMatchers(HttpMethod.POST, "/api/hr/approve-signup/*").hasRole("HR")
                         .requestMatchers(HttpMethod.POST, "/api/hr/disapprove-signup/*").hasRole("HR")
-
                         // Authenticated endpoints
                         .requestMatchers(HttpMethod.POST, "/api/leaves").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/leaves").authenticated()
@@ -103,6 +103,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/leaves/*/approve").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/leaves/*/reject").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/users/subordinates").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/users/me").authenticated()
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(session -> session
