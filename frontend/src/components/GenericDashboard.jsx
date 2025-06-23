@@ -1,20 +1,21 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, CalendarCheck, FileText, Clock, CheckCircle, XCircle, AlertCircle, User, Menu, X, LogOut, Users } from 'lucide-react';
+import { Calendar, CalendarCheck, FileText, Clock, CheckCircle, XCircle, AlertCircle, User, Menu, X, LogOut, Users, Trash2 } from 'lucide-react';
 
 export default function GenericDashboard() {
     const [userData, setUserData] = useState(null);
     const [holidays, setHolidays] = useState([]);
     const [leaveBalance, setLeaveBalance] = useState({
-        casualLeave: { total: 12, used: 0, remaining: 0 },
-        earnedLeave: { total: 20, used: 0, remaining: 0, usedFirstHalf: 0, usedSecondHalf: 0, carryover: 0 },
-        maternityLeave: { total: 182, used: 0, remaining: 182 },
-        paternityLeave: { total: 15, used: 0, remaining: 15 },
-        leaveWithoutPay: { total: 300, used: 0, remaining: 300 },
+        casualLeave: {total: 12, used: 0, remaining: 0},
+        earnedLeave: {total: 20, used: 0, remaining: 0, usedFirstHalf: 0, usedSecondHalf: 0, carryover: 0},
+        maternityLeave: {total: 182, used: 0, remaining: 182},
+        paternityLeave: {total: 15, used: 0, remaining: 15},
+        leaveWithoutPay: {total: 300, used: 0, remaining: 300},
     });
     const [leaveApplications, setLeaveApplications] = useState([]);
     const [subordinates, setSubordinates] = useState([]);
     const [pendingLeaves, setPendingLeaves] = useState([]);
+    const [cancellableLeaves, setCancellableLeaves] = useState([]);
     const [leaveFormData, setLeaveFormData] = useState({
         leaveType: 'CL',
         startDate: '',
@@ -50,7 +51,7 @@ export default function GenericDashboard() {
 
                 // Fetch user data
                 const response = await fetch('http://localhost:8081/api/users/me', {
-                    headers: { Authorization: `Bearer ${token}` },
+                    headers: {Authorization: `Bearer ${token}`},
                 });
                 if (response.ok) {
                     const data = await response.json();
@@ -61,15 +62,16 @@ export default function GenericDashboard() {
                         ? Math.max(0, currentMonth - joinMonth + 1)
                         : currentMonth;
                     data.accruedCl = Math.min(12, monthsAccrued);
-                    data.reportingTo = data.reportingToName ? { fullName: data.reportingToName } : { fullName: null };
+                    data.reportingTo = data.reportingToName ? {fullName: data.reportingToName} : {fullName: null};
                     setUserData(data);
 
                     // Fetch subordinates
+                    let subordinatesData = [];
                     const subordinatesResponse = await fetch('http://localhost:8081/api/users/subordinates', {
-                        headers: { Authorization: `Bearer ${token}` },
+                        headers: {Authorization: `Bearer ${token}`},
                     });
                     if (subordinatesResponse.ok) {
-                        const subordinatesData = await subordinatesResponse.json();
+                        subordinatesData = await subordinatesResponse.json();
                         setSubordinates(subordinatesData);
                     } else {
                         setSubordinates([]);
@@ -77,7 +79,7 @@ export default function GenericDashboard() {
 
                     // Fetch pending leaves
                     const pendingResponse = await fetch('http://localhost:8081/api/leaves/pending', {
-                        headers: { Authorization: `Bearer ${token}` },
+                        headers: {Authorization: `Bearer ${token}`},
                     });
                     if (pendingResponse.ok) {
                         const pendingData = await pendingResponse.json();
@@ -86,9 +88,24 @@ export default function GenericDashboard() {
                         setPendingLeaves([]);
                     }
 
+                    // Fetch cancellable leaves
+                    if (subordinatesData.length > 0) {
+                        const cancellableResponse = await fetch('http://localhost:8081/api/leaves/cancellable', {
+                            headers: {Authorization: `Bearer ${token}`},
+                        });
+                        if (cancellableResponse.ok) {
+                            const cancellableData = await cancellableResponse.json();
+                            setCancellableLeaves(cancellableData);
+                        } else {
+                            setCancellableLeaves([]);
+                        }
+                    } else {
+                        setCancellableLeaves([]);
+                    }
+
                     // Fetch holidays
                     const holidaysResponse = await fetch('http://localhost:8081/api/holidays', {
-                        headers: { Authorization: `Bearer ${token}` },
+                        headers: {Authorization: `Bearer ${token}`},
                     });
                     if (holidaysResponse.ok) {
                         const holidaysData = await holidaysResponse.json();
@@ -119,18 +136,18 @@ export default function GenericDashboard() {
                 if (!token) return;
 
                 const balanceResponse = await fetch('http://localhost:8081/api/leaves/balance', {
-                    headers: { Authorization: `Bearer ${token}` },
+                    headers: {Authorization: `Bearer ${token}`},
                 });
                 if (balanceResponse.ok) {
                     const balanceData = await balanceResponse.json();
                     const sanitizedBalance = {
-                        casualLeave: balanceData.casualLeave || { total: 12, used: 0, remaining: 0 },
+                        casualLeave: balanceData.casualLeave || {total: 12, used: 0, remaining: 0},
                         earnedLeave: balanceData.earnedLeave || {
                             total: 20, used: 0, remaining: 0, usedFirstHalf: 0, usedSecondHalf: 0, carryover: 0,
                         },
-                        maternityLeave: balanceData.maternityLeave || { total: 182, used: 0, remaining: 182 },
-                        paternityLeave: balanceData.paternityLeave || { total: 15, used: 0, remaining: 15 },
-                        leaveWithoutPay: balanceData.leaveWithoutPay || { total: 300, used: 0, remaining: 300 },
+                        maternityLeave: balanceData.maternityLeave || {total: 182, used: 0, remaining: 182},
+                        paternityLeave: balanceData.paternityLeave || {total: 15, used: 0, remaining: 15},
+                        leaveWithoutPay: balanceData.leaveWithoutPay || {total: 300, used: 0, remaining: 300},
                     };
                     Object.keys(sanitizedBalance).forEach((key) => {
                         sanitizedBalance[key].used = Number((sanitizedBalance[key].used || 0).toFixed(1));
@@ -145,7 +162,7 @@ export default function GenericDashboard() {
                 }
 
                 const applicationsResponse = await fetch('http://localhost:8081/api/leaves', {
-                    headers: { Authorization: `Bearer ${token}` },
+                    headers: {Authorization: `Bearer ${token}`},
                 });
                 if (applicationsResponse.ok) {
                     const applicationsData = await applicationsResponse.json();
@@ -175,7 +192,7 @@ export default function GenericDashboard() {
     useEffect(() => {
         if (leaveFormData.startDate && (leaveFormData.leaveType === 'ML' || leaveFormData.leaveType === 'PL')) {
             const calculatedEndDate = calculateEndDate(leaveFormData.startDate, leaveFormData.leaveType);
-            setLeaveFormData((prev) => ({ ...prev, endDate: calculatedEndDate }));
+            setLeaveFormData((prev) => ({...prev, endDate: calculatedEndDate}));
         }
         if (leaveFormData.startDate) {
             const days = calculateLeaveDays(
@@ -402,7 +419,7 @@ export default function GenericDashboard() {
             }
 
             if (availableClForMonth < leaveDays) {
-                setError(`Insufficient CL balance for ${startDate.toLocaleString('default', { month: 'long' })}: ${availableClForMonth.toFixed(1)}`);
+                setError(`Insufficient CL balance for ${startDate.toLocaleString('default', {month: 'long'})}: ${availableClForMonth.toFixed(1)}`);
                 setIsSubmitting(false);
                 return;
             }
@@ -542,18 +559,18 @@ export default function GenericDashboard() {
                 setActiveView('leave-applications');
 
                 const balanceResponse = await fetch('http://localhost:8081/api/leaves/balance', {
-                    headers: { Authorization: `Bearer ${token}` },
+                    headers: {Authorization: `Bearer ${token}`},
                 });
                 if (balanceResponse.ok) {
                     const balanceData = await balanceResponse.json();
                     const sanitizedBalance = {
-                        casualLeave: balanceData.casualLeave || { total: 12, used: 0, remaining: 0 },
+                        casualLeave: balanceData.casualLeave || {total: 12, used: 0, remaining: 0},
                         earnedLeave: balanceData.earnedLeave || {
                             total: 20, used: 0, remaining: 0, usedFirstHalf: 0, usedSecondHalf: 0, carryover: 0,
                         },
-                        maternityLeave: balanceData.maternityLeave || { total: 182, used: 0, remaining: 182 },
-                        paternityLeave: balanceData.paternityLeave || { total: 15, used: 0, remaining: 15 },
-                        leaveWithoutPay: balanceData.leaveWithoutPay || { total: 300, used: 0, remaining: 300 },
+                        maternityLeave: balanceData.maternityLeave || {total: 182, used: 0, remaining: 182},
+                        paternityLeave: balanceData.paternityLeave || {total: 15, used: 0, remaining: 15},
+                        leaveWithoutPay: balanceData.leaveWithoutPay || {total: 300, used: 0, remaining: 300},
                     };
                     Object.keys(sanitizedBalance).forEach((key) => {
                         sanitizedBalance[key].used = Number((sanitizedBalance[key].used || 0).toFixed(1));
@@ -568,7 +585,7 @@ export default function GenericDashboard() {
                 }
 
                 const applicationsResponse = await fetch('http://localhost:8081/api/leaves', {
-                    headers: { Authorization: `Bearer ${token}` },
+                    headers: {Authorization: `Bearer ${token}`},
                 });
                 if (applicationsResponse.ok) {
                     const applicationsData = await applicationsResponse.json();
@@ -623,7 +640,7 @@ export default function GenericDashboard() {
             if (response.ok) {
                 setSuccessMessage(`Leave ${action}d successfully!`);
                 const pendingResponse = await fetch('http://localhost:8081/api/leaves/pending', {
-                    headers: { Authorization: `Bearer ${token}` },
+                    headers: {Authorization: `Bearer ${token}`},
                 });
                 if (pendingResponse.ok) {
                     const pendingData = await pendingResponse.json();
@@ -657,13 +674,13 @@ export default function GenericDashboard() {
     const getStatusIcon = (status) => {
         switch (status) {
             case 'PENDING':
-                return <Clock className="w-5 h-5 text-yellow-500" />;
+                return <Clock className="w-5 h-5 text-yellow-500"/>;
             case 'APPROVED':
-                return <CheckCircle className="w-5 h-5 text-green-500" />;
+                return <CheckCircle className="w-5 h-5 text-green-500"/>;
             case 'REJECTED':
-                return <XCircle className="w-5 h-5 text-red-500" />;
+                return <XCircle className="w-5 h-5 text-red-500"/>;
             default:
-                return <AlertCircle className="w-5 h-5 text-gray-500" />;
+                return <AlertCircle className="w-5 h-5 text-gray-500"/>;
         }
     };
 
@@ -723,18 +740,18 @@ export default function GenericDashboard() {
             title: 'Total Leave Balance (CL + EL)',
             value: totalRemainingLeaves,
             borderColor: 'border-purple-500',
-            icon: <User size={24} className="text-purple-500" />,
-            details: [{ label: 'Total Remaining', value: totalRemainingLeaves }],
+            icon: <User size={24} className="text-purple-500"/>,
+            details: [{label: 'Total Remaining', value: totalRemainingLeaves}],
         },
         {
             key: 'casual-leave',
             title: 'Casual Leave (CL)',
             borderColor: 'border-blue-500',
-            icon: <CalendarCheck size={24} className="text-blue-500" />,
+            icon: <CalendarCheck size={24} className="text-blue-500"/>,
             details: [
-                { label: 'Total Annual', value: leaveBalance.casualLeave.total },
-                { label: 'Accrued This Year', value: userData?.accruedCl || 0, textColor: 'text-blue-600' },
-                { label: 'Used', value: leaveBalance.casualLeave.used.toFixed(1), textColor: 'text-red-600' },
+                {label: 'Total Annual', value: leaveBalance.casualLeave.total},
+                {label: 'Accrued This Year', value: userData?.accruedCl || 0, textColor: 'text-blue-600'},
+                {label: 'Used', value: leaveBalance.casualLeave.used.toFixed(1), textColor: 'text-red-600'},
                 {
                     label: 'Remaining',
                     value: leaveBalance.casualLeave.remaining.toFixed(1),
@@ -753,9 +770,9 @@ export default function GenericDashboard() {
             key: 'earned-leave',
             title: 'Earned Leave (EL)',
             borderColor: 'border-green-500',
-            icon: <Calendar size={24} className="text-green-500" />,
+            icon: <Calendar size={24} className="text-green-500"/>,
             details: [
-                { label: 'Total Annual', value: leaveBalance.earnedLeave.total },
+                {label: 'Total Annual', value: leaveBalance.earnedLeave.total},
                 {
                     label: 'Carryover',
                     value: leaveBalance.earnedLeave.carryover.toFixed(1),
@@ -786,10 +803,10 @@ export default function GenericDashboard() {
                 key: 'maternity-leave',
                 title: 'Maternity Leave (ML)',
                 borderColor: 'border-pink-500',
-                icon: <Calendar size={24} className="text-pink-500" />,
+                icon: <Calendar size={24} className="text-pink-500"/>,
                 details: [
-                    { label: 'Total', value: leaveBalance.maternityLeave.total },
-                    { label: 'Used', value: leaveBalance.maternityLeave.used.toFixed(1), textColor: 'text-red-600' },
+                    {label: 'Total', value: leaveBalance.maternityLeave.total},
+                    {label: 'Used', value: leaveBalance.maternityLeave.used.toFixed(1), textColor: 'text-red-600'},
                     {
                         label: 'Remaining',
                         value: leaveBalance.maternityLeave.remaining.toFixed(1),
@@ -803,10 +820,10 @@ export default function GenericDashboard() {
                 key: 'paternity-leave',
                 title: 'Paternity Leave (PL)',
                 borderColor: 'border-blue-500',
-                icon: <Calendar size={24} className="text-blue-500" />,
+                icon: <Calendar size={24} className="text-blue-500"/>,
                 details: [
-                    { label: 'Total', value: leaveBalance.paternityLeave.total },
-                    { label: 'Used', value: leaveBalance.paternityLeave.used.toFixed(1), textColor: 'text-red-600' },
+                    {label: 'Total', value: leaveBalance.paternityLeave.total},
+                    {label: 'Used', value: leaveBalance.paternityLeave.used.toFixed(1), textColor: 'text-red-600'},
                     {
                         label: 'Remaining',
                         value: leaveBalance.paternityLeave.remaining.toFixed(1),
@@ -819,19 +836,18 @@ export default function GenericDashboard() {
             key: 'leave-without-pay',
             title: 'Leave Without Pay (LWP)',
             borderColor: 'border-gray-500',
-            icon: <Calendar size={24} className="text-gray-500" />,
+            icon: <Calendar size={24} className="text-gray-500"/>,
             details: [
-                { label: 'Used', value: leaveBalance.leaveWithoutPay.used.toFixed(1), textColor: 'text-red-600' },
+                {label: 'Used', value: leaveBalance.leaveWithoutPay.used.toFixed(1), textColor: 'text-red-600'},
             ],
         },
     ];
-
     const renderDashboardView = () => {
         if (isLoading) {
             return (
                 <div className="flex justify-center items-center h-64">
-                    <svg className="animate-spin h-8 w-8 text-blue-500" xmlns="http://www.w3.org/2000/svg"
-                         fill="none" viewBox="0 0 24 24">
+                    <svg className="animate-spin h-8 w-8 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none"
+                         viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
                                 strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
@@ -860,8 +876,8 @@ export default function GenericDashboard() {
                                             <span className="text-gray-600">{detail.label}</span>
                                             <span
                                                 className={`font-bold text-xl ${detail.textColor || 'text-gray-900'}`}>
-                                                {detail.value}
-                                            </span>
+                                            {detail.value}
+                                        </span>
                                         </div>
                                     ))}
                                     {metric.note && (
@@ -880,6 +896,9 @@ export default function GenericDashboard() {
         const isHalfDay = leaveFormData.leaveType === 'HALF_DAY_CL' || leaveFormData.leaveType === 'HALF_DAY_EL' || leaveFormData.leaveType === 'HALF_DAY_LWP';
         const isFixedDuration = leaveFormData.leaveType === 'ML' || leaveFormData.leaveType === 'PL';
         const applicationMonth = leaveFormData.startDate ? new Date(leaveFormData.startDate).getMonth() + 1 : null;
+        const minDate = (leaveFormData.leaveType === 'CL' || leaveFormData.leaveType === 'HALF_DAY_CL')
+            ? new Date(new Date().setDate(new Date().getDate() - 6)).toISOString().split('T')[0]
+            : today;
 
         return (
             <div className="space-y-6">
@@ -896,7 +915,7 @@ export default function GenericDashboard() {
                         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
                             <p className="text-sm text-yellow-800 font-medium">
                                 Advance CL
-                                for {new Date(leaveFormData.startDate).toLocaleString('default', { month: 'long' })}: {(leaveApplications
+                                for {new Date(leaveFormData.startDate).toLocaleString('default', {month: 'long'})}: {(leaveApplications
                                 .filter(app => (app.leaveType === 'CL' || app.leaveType === 'HALF_DAY_CL') &&
                                     (app.status === 'APPROVED' || app.status === 'PENDING'))
                                 .reduce((total, app) => total + calculateLeaveDays(app.startDate, app.endDate, app.leaveType), 0) + leaveDays).toFixed(1)} days
@@ -966,28 +985,28 @@ export default function GenericDashboard() {
                                 <div className="relative">
                                     <div
                                         className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                        <Calendar size={18} className="text-gray-400" />
+                                        <Calendar size={18} className="text-gray-400"/>
                                     </div>
                                     <input
                                         type="date"
                                         value={leaveFormData.startDate}
                                         onChange={(e) => {
                                             const startDate = e.target.value;
-                                            setLeaveFormData({ ...leaveFormData, startDate });
+                                            setLeaveFormData({...leaveFormData, startDate});
                                             if (isNonWorkingDay(startDate) && (leaveFormData.leaveType === 'HALF_DAY_CL' || leaveFormData.leaveType === 'HALF_DAY_EL' || leaveFormData.leaveType === 'HALF_DAY_LWP')) {
                                                 setError('Half-day leave cannot be applied on a non-working day');
                                             } else {
                                                 setError('');
                                             }
                                         }}
-                                        min={today}
-                                        className={`pl-10 w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${leaveFormData.startDate && leaveFormData.startDate < today ? 'border-red-500 bg-red-50' : ''}`}
+                                        min={minDate}
+                                        className={`pl-10 w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${leaveFormData.startDate && leaveFormData.startDate < minDate ? 'border-red-500 bg-red-50' : ''}`}
                                         autoComplete="off"
                                     />
                                 </div>
-                                {leaveFormData.startDate && leaveFormData.startDate < today && (
+                                {leaveFormData.startDate && leaveFormData.startDate < minDate && (
                                     <div className="text-red-600 text-sm mt-1">
-                                        Past dates are not allowed.
+                                        Date is outside the allowed range.
                                     </div>
                                 )}
                             </div>
@@ -997,7 +1016,7 @@ export default function GenericDashboard() {
                                     <div className="relative">
                                         <div
                                             className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                            <Calendar size={18} className="text-gray-400" />
+                                            <Calendar size={18} className="text-gray-400"/>
                                         </div>
                                         <input
                                             type="date"
@@ -1024,7 +1043,7 @@ export default function GenericDashboard() {
                                     <div className="relative">
                                         <div
                                             className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                            <Calendar size={18} className="text-gray-400" />
+                                            <Calendar size={18} className="text-gray-400"/>
                                         </div>
                                         <input
                                             type="date"
@@ -1043,7 +1062,7 @@ export default function GenericDashboard() {
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Reason</label>
                                 <textarea
                                     value={leaveFormData.reason}
-                                    onChange={(e) => setLeaveFormData({ ...leaveFormData, reason: e.target.value })}
+                                    onChange={(e) => setLeaveFormData({...leaveFormData, reason: e.target.value})}
                                     rows="3"
                                     className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                     autoComplete="off"
@@ -1068,7 +1087,7 @@ export default function GenericDashboard() {
                                         leaveFormData.leaveType !== 'ML' &&
                                         leaveFormData.leaveType !== 'PL') &&
                                     !leaveFormData.endDate) ||
-                                (leaveFormData.startDate && leaveFormData.startDate < today) ||
+                                (leaveFormData.startDate && leaveFormData.startDate < minDate) ||
                                 (leaveFormData.endDate && leaveFormData.startDate && leaveFormData.endDate < leaveFormData.startDate && leaveFormData.leaveType !== 'ML' && leaveFormData.leaveType !== 'PL') ||
                                 leaveDays === 0
                             }
@@ -1083,15 +1102,14 @@ export default function GenericDashboard() {
                         >
                             {isSubmitting ? (
                                 <span className="flex items-center">
-                                    <svg className="animate-spin h-5 w-5 mr-2 text-white"
-                                         xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
-                                                strokeWidth="4"></circle>
-                                        <path className="opacity-75" fill="currentColor"
-                                              d="M4 12a8 8 0 018-8v8H4z"></path>
-                                    </svg>
-                                    Submitting...
-                                </span>
+                                <svg className="animate-spin h-5 w-5 mr-2 text-white" xmlns="http://www.w3.org/2000/svg"
+                                     fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                            strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                                </svg>
+                                Submitting...
+                            </span>
                             ) : (
                                 'Submit Application'
                             )}
@@ -1106,8 +1124,8 @@ export default function GenericDashboard() {
         if (isLoading) {
             return (
                 <div className="flex justify-center items-center h-64">
-                    <svg className="animate-spin h-8 w-8 text-blue-500" xmlns="http://www.w3.org/2000/svg"
-                         fill="none" viewBox="0 0 24 24">
+                    <svg className="animate-spin h-8 w-8 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none"
+                         viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
                                 strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
@@ -1176,8 +1194,8 @@ export default function GenericDashboard() {
         if (isLoading) {
             return (
                 <div className="flex justify-center items-center h-64">
-                    <svg className="animate-spin h-8 w-8 text-blue-500" xmlns="http://www.w3.org/2000/svg"
-                         fill="none" viewBox="0 0 24 24">
+                    <svg className="animate-spin h-8 w-8 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none"
+                         viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
                                 strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
@@ -1230,8 +1248,8 @@ export default function GenericDashboard() {
         if (isLoading) {
             return (
                 <div className="flex justify-center items-center h-64">
-                    <svg className="animate-spin h-8 w-8 text-blue-500" xmlns="http://www.w3.org/2000/svg"
-                         fill="none" viewBox="0 0 24 24">
+                    <svg className="animate-spin h-8 w-8 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none"
+                         viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
                                 strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
@@ -1304,6 +1322,136 @@ export default function GenericDashboard() {
         );
     };
 
+    const renderCancellableLeavesView = () => {
+        if (subordinates.length === 0) return null;
+        if (isLoading) {
+            return (
+                <div className="flex justify-center items-center h-64">
+                    <svg className="animate-spin h-8 w-8 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none"
+                         viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                    </svg>
+                </div>
+            );
+        }
+
+        return (
+            <div className="space-y-6">
+                <h2 className="text-2xl font-semibold text-gray-900">Cancellable Leaves</h2>
+                <div className="bg-white rounded-lg shadow-lg p-6">
+                    {cancellableLeaves.length > 0 ? (
+                        <div className="overflow-x-auto">
+                            <table className="w-full">
+                                <thead>
+                                <tr className="border-b">
+                                    <th className="text-left py-3 px-4 font-medium text-gray-700">Employee</th>
+                                    <th className="text-left py-3 px-4 font-medium text-gray-700">Role</th>
+                                    <th className="text-left py-3 px-4 font-medium text-gray-700">Email</th>
+                                    <th className="text-left py-3 px-4 font-medium text-gray-700">ID</th>
+                                    <th className="text-left py-3 px-4 font-medium text-gray-700">Department</th>
+                                    <th className="text-left py-3 px-4 font-medium text-gray-700">Leave Date(s)</th>
+                                    <th className="text-left py-3 px-4 font-medium text-gray-700">Type</th>
+                                    <th className="text-left py-3 px-4 font-medium text-gray-700">Actions</th>
+                                </tr>
+                                </thead>
+                                <tbody>
+                                {cancellableLeaves.map((leave) => {
+                                    const subordinate = subordinates.find(s => s.fullName === leave.userName) || {};
+                                    return (
+                                        <tr key={leave.id} className="border-b hover:bg-gray-50">
+                                            <td className="py-3 px-4">{leave.userName || "N/A"}</td>
+                                            <td className="py-3 px-4">{subordinate.role || "N/A"}</td>
+                                            <td className="py-3 px-4">{subordinate.email || "N/A"}</td>
+                                            <td className="py-3 px-4">{subordinate.employeeId || "N/A"}</td>
+                                            <td className="py-3 px-4">{leave.department || "N/A"}</td>
+                                            <td className="py-3 px-4">
+                                                {leave.isHalfDay
+                                                    ? `${formatDate(leave.startDate)} (Half-Day)`
+                                                    : `${formatDate(leave.startDate)} - ${formatDate(leave.endDate)}`}
+                                            </td>
+                                            <td className="py-3 px-4">{leave.leaveType || "N/A"}</td>
+                                            <td className="py-3 px-4">
+                                                <button
+                                                    onClick={() => handleCancelLeave(leave.id)}
+                                                    className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600"
+                                                    disabled={isSubmitting}
+                                                >
+                                                    Cancel
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                                </tbody>
+                            </table>
+                        </div>
+                    ) : (
+                        <div className="text-center py-6">
+                            <p className="text-gray-600">No cancellable leaves found.</p>
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
+    };
+
+    const handleCancelLeave = async (leaveId) => {
+        setIsSubmitting(true);
+        setError('');
+        setSuccessMessage('');
+
+        try {
+            const token = localStorage.getItem('authToken');
+            if (!token) {
+                setError('Session expired. Please log in again.');
+                localStorage.removeItem('authToken');
+                navigate('/');
+                setIsSubmitting(false);
+                return;
+            }
+
+            const response = await fetch(`http://localhost:8081/api/leaves/${leaveId}/cancel`, {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+
+            if (response.ok) {
+                setSuccessMessage('Leave cancelled successfully!');
+                const cancellableResponse = await fetch('http://localhost:8081/api/leaves/cancellable', {
+                    headers: {Authorization: `Bearer ${token}`},
+                });
+                if (cancellableResponse.ok) {
+                    const cancellableData = await cancellableResponse.json();
+                    setCancellableLeaves(cancellableData);
+                }
+            } else {
+                let errorMessage = 'Failed to cancel leave';
+                if (response.status === 401) {
+                    setError('Session expired. Please log in again.');
+                    localStorage.removeItem('authToken');
+                    navigate('/');
+                } else {
+                    try {
+                        const errorData = await response.json();
+                        errorMessage = errorData.message || errorMessage;
+                    } catch (jsonError) {
+                        errorMessage = `Server error: ${response.status} ${response.statusText}`;
+                    }
+                    setError(errorMessage);
+                }
+            }
+        } catch (err) {
+            console.error('Error cancelling leave:', err);
+            setError('An error occurred while cancelling the leave');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
     const renderMainContent = () => {
         if (error && (error.includes('Session expired') || error.includes('Failed to fetch user data'))) {
             return (
@@ -1324,6 +1472,8 @@ export default function GenericDashboard() {
                 return renderSubordinatesView();
             case 'pending-leaves':
                 return renderPendingLeavesView();
+            case 'cancel-leaves':
+                return renderCancellableLeavesView();
             default:
                 return renderDashboardView();
         }
@@ -1336,11 +1486,11 @@ export default function GenericDashboard() {
             >
                 <div className="flex items-center justify-between p-4 border-b border-blue-800">
                     <div className="flex items-center space-x-3">
-                        <img src="/Images/bisag_logo.png" alt="BISAG-N Logo" className="h-10 w-10 rounded-full" />
+                        <img src="/Images/bisag_logo.png" alt="BISAG-N Logo" className="h-10 w-10 rounded-full"/>
                         <span className="text-xl font-semibold">BISAG-N HRMS</span>
                     </div>
                     <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden">
-                        <X size="24" />
+                        <X size="24"/>
                     </button>
                 </div>
                 <nav className="p-4 space-y-2">
@@ -1348,21 +1498,21 @@ export default function GenericDashboard() {
                         onClick={() => setActiveView('dashboard')}
                         className={`flex items-center w-full p-3 text-left rounded-lg transition duration-200 ${activeView === 'dashboard' ? 'bg-blue-800' : 'hover:bg-blue-800'}`}
                     >
-                        <User size={20} className="mr-3" />
+                        <User size={20} className="mr-3"/>
                         Dashboard
                     </button>
                     <button
                         onClick={() => setActiveView('apply-leave')}
                         className={`flex items-center w-full p-3 text-left rounded-lg transition duration-200 ${activeView === 'apply-leave' ? 'bg-blue-800' : 'hover:bg-blue-800'}`}
                     >
-                        <FileText size={20} className="mr-3" />
+                        <FileText size={20} className="mr-3"/>
                         Apply for Leave
                     </button>
                     <button
                         onClick={() => setActiveView('leave-applications')}
                         className={`flex items-center w-full p-3 text-left rounded-lg transition duration-200 ${activeView === 'leave-applications' ? 'bg-blue-800' : 'hover:bg-blue-800'}`}
                     >
-                        <CalendarCheck size={20} className="mr-3" />
+                        <CalendarCheck size={20} className="mr-3"/>
                         Leave Applications
                     </button>
                     {subordinates.length > 0 && (
@@ -1371,15 +1521,25 @@ export default function GenericDashboard() {
                                 onClick={() => setActiveView('subordinates')}
                                 className={`flex items-center w-full p-3 text-left rounded-lg transition duration-200 ${activeView === 'subordinates' ? 'bg-blue-800' : 'hover:bg-blue-800'}`}
                             >
-                                <Users size={20} className="mr-3" />
+                                <Users size={20} className="mr-3"/>
                                 Subordinates
                             </button>
                             <button
                                 onClick={() => setActiveView('pending-leaves')}
                                 className={`flex items-center w-full p-3 text-left rounded-lg transition duration-200 ${activeView === 'pending-leaves' ? 'bg-blue-800' : 'hover:bg-blue-800'}`}
                             >
-                                <Clock size={20} className="mr-3" />
+                                <Clock size={20} className="mr-3"/>
                                 Pending Leaves
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setActiveView('cancel-leaves');
+                                    setIsSidebarOpen(false);
+                                }}
+                                className={`flex items-center w-full p-3 text-left rounded-lg transition duration-200 ${activeView === 'cancel-leaves' ? 'bg-blue-800' : 'hover:bg-blue-800'}`}
+                            >
+                                <Trash2 size={20} className="mr-3"/>
+                                Cancel Leaves
                             </button>
                         </>
                     )}
@@ -1387,7 +1547,7 @@ export default function GenericDashboard() {
                         onClick={handleLogout}
                         className="flex items-center w-full p-3 text-left rounded-lg hover:bg-red-600 transition duration-200"
                     >
-                        <LogOut size={20} className="mr-3" />
+                        <LogOut size={20} className="mr-3"/>
                         Logout
                     </button>
                 </nav>
@@ -1397,23 +1557,22 @@ export default function GenericDashboard() {
                 <header className="bg-white shadow-lg p-4 flex items-center justify-between">
                     <div className="flex items-center">
                         <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden mr-4">
-                            <Menu size={24} className="text-gray-700" />
+                            <Menu size={24} className="text-gray-700"/>
                         </button>
                         <h1 className="text-2xl font-semibold text-gray-900">BISAG-N Dashboard</h1>
                     </div>
                     <div className="flex items-center space-x-4">
                         <div className="flex flex-col">
-                            <span
-                                className="text-gray-700 font-medium">Welcome, {userData?.fullName || 'User'}</span>
+                            <span className="text-gray-700 font-medium">Welcome, {userData?.fullName || 'User'}</span>
                             {userData?.reportingTo?.fullName ? (
                                 <span className="text-gray-500 text-sm">
-                                    Reporting to: {userData.reportingTo.fullName}
-                                </span>
+                                Reporting to: {userData.reportingTo.fullName}
+                            </span>
                             ) : (
                                 <span className="text-gray-500 text-sm">Reporting to: Not assigned</span>
                             )}
                         </div>
-                        <img src="/Images/bisag_logo.png" alt="BISAG-N Logo" className="h-8 w-8 rounded-full" />
+                        <img src="/Images/bisag_logo.png" alt="BISAG-N Logo" className="h-8 w-8 rounded-full"/>
                     </div>
                 </header>
 

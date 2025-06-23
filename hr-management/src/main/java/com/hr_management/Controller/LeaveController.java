@@ -12,6 +12,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.servlet.http.HttpServletRequest;
+import java.time.LocalDate;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -34,7 +35,6 @@ public class LeaveController {
         logger.debug("Request Headers: {}", Collections.list(request.getHeaderNames()).stream()
                 .collect(Collectors.toMap(name -> name, request::getHeader)));
         try {
-            // Ensure user is set by service, not frontend
             application.setUser(null);
             LeaveApplication savedApplication = leaveService.applyLeave(application);
             return ResponseEntity.ok(savedApplication);
@@ -61,6 +61,29 @@ public class LeaveController {
         }
     }
 
+    @GetMapping(value = "/available-cl/{year}/{month}", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<?> getAvailableClForMonth(@PathVariable int year, @PathVariable int month) {
+        logger.info("Fetching available CL for year: {}, month: {}", year, month);
+        try {
+            if (year < 2000 || year > LocalDate.now().getYear() + 1) {
+                throw new RuntimeException("Invalid year: " + year);
+            }
+            if (month < 1 || month > 12) {
+                throw new RuntimeException("Invalid month: " + month);
+            }
+            Map<String, Double> availableCl = leaveService.getAvailableClForMonth(year, month);
+            return ResponseEntity.ok(availableCl);
+        } catch (RuntimeException e) {
+            logger.warn("Failed to fetch available CL: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Collections.singletonMap("message", e.getMessage()));
+        } catch (Exception e) {
+            logger.error("Unexpected error fetching available CL: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Collections.singletonMap("message", "An unexpected error occurred"));
+        }
+    }
+
     @GetMapping(value = "/balance", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<Map<String, Object>> getLeaveBalance() {
         logger.info("Fetching leave balance for current user");
@@ -82,6 +105,18 @@ public class LeaveController {
             return ResponseEntity.ok(leaves);
         } catch (Exception e) {
             logger.error("Error fetching pending leaves: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Collections.emptyList());
+        }
+    }
+
+    @GetMapping(value = "/cancellable", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<List<LeaveApplicationDTO>> getCancellableLeavesForCurrentUser() {
+        logger.info("Fetching cancellable leave applications for current user");
+        try {
+            List<LeaveApplicationDTO> leaves = leaveService.getCancellableLeavesForCurrentUser();
+            return ResponseEntity.ok(leaves);
+        } catch (Exception e) {
+            logger.error("Error fetching cancellable leaves: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Collections.emptyList());
         }
     }
@@ -131,6 +166,23 @@ public class LeaveController {
                     .body(Collections.singletonMap("message", e.getMessage()));
         } catch (Exception e) {
             logger.error("Unexpected error rejecting leave: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Collections.singletonMap("message", "An unexpected error occurred"));
+        }
+    }
+
+    @PostMapping(value = "/{id}/cancel", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<Map<String, String>> cancelLeave(@PathVariable Long id) {
+        logger.info("Cancelling leave application ID: {}", id);
+        try {
+            leaveService.cancelLeave(id);
+            return ResponseEntity.ok(Collections.singletonMap("message", "Leave cancelled successfully"));
+        } catch (RuntimeException e) {
+            logger.warn("Failed to cancel leave: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Collections.singletonMap("message", e.getMessage()));
+        } catch (Exception e) {
+            logger.error("Unexpected error cancelling leave: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Collections.singletonMap("message", "An unexpected error occurred"));
         }

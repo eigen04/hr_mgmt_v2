@@ -62,9 +62,18 @@ public class LeaveServiceImpl implements LeaveService {
         application.setAppliedOn(LocalDate.now());
 
         LocalDate today = LocalDate.now();
-        if (application.getStartDate().isBefore(today)) {
-            logger.warn("Attempted to apply leave with past start date: {} for user: {}", application.getStartDate(), user.getId());
-            throw new RuntimeException("Start date cannot be in the past");
+        LocalDate earliestAllowedDate = today.minusDays(6);
+        if (application.getLeaveType().equals("CL") || application.getLeaveType().equals("HALF_DAY_CL")) {
+            if (application.getStartDate().isBefore(earliestAllowedDate)) {
+                logger.warn("Attempted to apply CL with start date {} before allowed period (from {}) for user: {}",
+                        application.getStartDate(), earliestAllowedDate, user.getId());
+                throw new RuntimeException("Casual leave can only be applied for dates within the last 6 days, including today");
+            }
+        } else {
+            if (application.getStartDate().isBefore(today)) {
+                logger.warn("Attempted to apply non-CL leave with past start date: {} for user: {}", application.getStartDate(), user.getId());
+                throw new RuntimeException("Start date cannot be in the past for non-casual leave types");
+            }
         }
 
         if (application.getLeaveType().equals("ML")) {
@@ -150,7 +159,7 @@ public class LeaveServiceImpl implements LeaveService {
                 application.getId(), application.getLeaveType(), requiredDays);
 
         if (effectiveLeaveType.equals("CL")) {
-            validateClApplication(user, application.getStartDate(), requiredDays, balance.get("CL"));
+            validateClApplication(user, application.getStartDate(), application.getEndDate(), requiredDays, balance.get("CL"));
         }
 
         if (effectiveLeaveType.equals("EL")) {
@@ -182,189 +191,6 @@ public class LeaveServiceImpl implements LeaveService {
         LeaveApplication savedApplication = leaveApplicationRepository.save(application);
         logger.info("Leave application saved: ID {}", savedApplication.getId());
         return savedApplication;
-    }
-
-    private LeaveBalance initializeLeaveBalance(User user) {
-        LeaveBalance leaveBalance = user.getLeaveBalance();
-        if (leaveBalance == null) {
-            leaveBalance = new LeaveBalance();
-            user.setLeaveBalance(leaveBalance);
-        }
-        LocalDate joinDate = user.getJoinDate();
-        int currentYear = LocalDate.now().getYear();
-        int joinYear = joinDate.getYear();
-        int joinMonth = joinDate.getMonthValue();
-
-        if (leaveBalance.getLastInitializedYear() == null || leaveBalance.getLastInitializedYear() != currentYear) {
-            leaveBalance.setCasualLeaveUsed(0.0);
-            leaveBalance.setMonthlyClAccrual(new HashMap<>());
-            leaveBalance.setLastInitializedYear(currentYear);
-        }
-
-        Map<Integer, Double> monthlyClAccrual = leaveBalance.getMonthlyClAccrual();
-        int startMonth = (joinYear == currentYear) ? joinMonth : 1;
-        for (int month = startMonth; month <= 12; month++) {
-            monthlyClAccrual.put(month, 1.0);
-        }
-        leaveBalance.setCasualLeaveRemaining(calculateAvailableCl(user, LocalDate.now()));
-
-        leaveBalance.setEarnedLeaveUsedFirstHalf(0.0);
-        leaveBalance.setEarnedLeaveUsedSecondHalf(0.0);
-        leaveBalance.setEarnedLeaveRemaining(calculateAvailableEl(user, LocalDate.now()));
-
-        if ("FEMALE".equalsIgnoreCase(user.getGender())) {
-            leaveBalance.setMaternityLeaveRemaining(182.0);
-            leaveBalance.setMaternityLeaveUsed(0.0);
-        } else {
-            leaveBalance.setPaternityLeaveRemaining(15.0);
-            leaveBalance.setPaternityLeaveUsed(0.0);
-        }
-        userRepository.save(user);
-        logger.info("Initialized leave balance for user {}: CL remaining={}, EL remaining={}",
-                user.getId(), leaveBalance.getCasualLeaveRemaining(), leaveBalance.getEarnedLeaveRemaining());
-        return leaveBalance;
-    }
-
-    private double calculateAvailableCl(User user, LocalDate date) {
-        LocalDate joinDate = user.getJoinDate();
-        int currentYear = date.getYear();
-        int joinYear = joinDate.getYear();
-        int currentMonth = date.getMonthValue();
-        int joinMonth = joinDate.getMonthValue();
-
-        if (currentYear < joinYear) return 0.0;
-
-        LeaveBalance leaveBalance = user.getLeaveBalance();
-        Map<Integer, Double> monthlyClAccrual = leaveBalance.getMonthlyClAccrual();
-
-        double totalClAccrued = 0.0;
-        int endMonth = (joinYear == currentYear) ? Math.min(12, currentMonth) : currentMonth;
-        for (int month = (joinYear == currentYear) ? joinMonth : 1; month <= endMonth; month++) {
-            totalClAccrued += monthlyClAccrual.getOrDefault(month, 0.0);
-        }
-
-        double clUsed = calculateTotalUsedDays(user, List.of("CL", "HALF_DAY_CL"),
-                LocalDate.of(currentYear, 1, 1), LocalDate.of(currentYear, 12, 31), true);
-        double availableCl = Math.max(0, totalClAccrued - clUsed);
-        logger.info("Calculated available CL for user {} on {}: accrued {}, used (including pending) {}, available {}",
-                user.getId(), date, totalClAccrued, clUsed, availableCl);
-        return availableCl;
-    }
-
-    private double calculateAvailableEl(User user, LocalDate date) {
-        LocalDate joinDate = user.getJoinDate();
-        int currentYear = date.getYear();
-        int joinYear = joinDate.getYear();
-        int currentMonth = date.getMonthValue();
-
-        logger.info("Calculating EL for user: {}, joinYear: {}, currentYear: {}, currentMonth: {}",
-                user.getId(), joinYear, currentYear, currentMonth);
-
-        LeaveBalance leaveBalance = user.getLeaveBalance();
-        if (leaveBalance == null) {
-            leaveBalance = initializeLeaveBalance(user);
-        }
-
-        double x = calculateTotalUsedDays(user, List.of("EL", "HALF_DAY_EL"),
-                LocalDate.of(currentYear, 1, 1), LocalDate.of(currentYear, 6, 30));
-        double y = calculateTotalUsedDays(user, List.of("EL", "HALF_DAY_EL"),
-                LocalDate.of(currentYear, 7, 1), LocalDate.of(currentYear, 12, 31), true);
-        double carryover = Math.max(0, EL_FIRST_HALF - x - y);
-
-        double available;
-        if (currentMonth <= 6) {
-            available = Math.max(0, EL_FIRST_HALF - x - y);
-        } else {
-            available = Math.max(0, (EL_SECOND_HALF + carryover) - y);
-        }
-
-        logger.info("EL calculation for user {}: x (first half used)={}, y (second half used including pending)={}, carryover={}, available={}",
-                user.getId(), x, y, carryover, available);
-
-        return available;
-    }
-
-    private void validateClApplication(User user, LocalDate startDate, double requiredDays, double availableCl) {
-        LocalDate joinDate = user.getJoinDate();
-        int currentYear = LocalDate.now().getYear();
-        int joinYear = joinDate.getYear();
-        int applicationMonth = startDate.getMonthValue();
-        int currentMonth = LocalDate.now().getMonthValue();
-
-        if (joinYear == currentYear && applicationMonth < joinDate.getMonthValue()) {
-            logger.warn("User {} attempted to apply CL for month {} before join month {}", user.getId(), applicationMonth, joinDate.getMonthValue());
-            throw new RuntimeException("Cannot apply CL for a month before joining date");
-        }
-
-        if (startDate.getYear() > currentYear) {
-            logger.warn("User {} attempted to apply CL for future year {}", user.getId(), startDate.getYear());
-            throw new RuntimeException("Advance CL application is only allowed within the current year");
-        }
-
-        int endMonth = (joinYear == currentYear) ? Math.min(12, applicationMonth) : applicationMonth;
-        double totalClAccrued = 0.0;
-        for (int month = (joinYear == currentYear) ? joinDate.getMonthValue() : 1; month <= endMonth; month++) {
-            totalClAccrued += 1.0;
-        }
-
-        double clUsed = calculateTotalUsedDays(user, List.of("CL", "HALF_DAY_CL"),
-                LocalDate.of(currentYear, 1, 1), LocalDate.of(currentYear, 12, 31), true);
-        double availableForApplicationMonth = Math.max(0, totalClAccrued - clUsed);
-
-        if (availableForApplicationMonth < requiredDays) {
-            logger.warn("User {} insufficient CL balance for month {}: requested {}, available {}",
-                    user.getId(), applicationMonth, requiredDays, availableForApplicationMonth);
-            throw new RuntimeException("Insufficient CL balance for month " + startDate.getMonth() +
-                    ". Requested: " + requiredDays + ", Available: " + availableForApplicationMonth);
-        }
-    }
-
-    private void validateElApplication(User user, LocalDate startDate, double requiredDays, double availableEl) {
-        int currentMonth = LocalDate.now().getMonthValue();
-        int applicationMonth = startDate.getMonthValue();
-        LocalDate joinDate = user.getJoinDate();
-        int joinYear = joinDate.getYear();
-        int currentYear = LocalDate.now().getYear();
-
-        if (startDate.getYear() > currentYear) {
-            logger.warn("User {} attempted to apply EL for future year {}", user.getId(), startDate.getYear());
-            throw new RuntimeException("Advance EL application is only allowed within the current year");
-        }
-
-        double x = calculateTotalUsedDays(user, List.of("EL", "HALF_DAY_EL"),
-                LocalDate.of(currentYear, 1, 1), LocalDate.of(currentYear, 6, 30));
-        double y = calculateTotalUsedDays(user, List.of("EL", "HALF_DAY_EL"),
-                LocalDate.of(currentYear, 7, 1), LocalDate.of(currentYear, 12, 31), true);
-        double carryover = Math.max(0, EL_FIRST_HALF - x - y);
-        double zEligible = EL_SECOND_HALF + carryover;
-
-        if (applicationMonth <= 6) {
-            if (currentMonth > 6) {
-                logger.warn("User {} attempted to apply EL for first half (month {}) in second half (month {})", user.getId(), applicationMonth, currentMonth);
-                throw new RuntimeException("Cannot apply EL for the first half (Jan-Jun) when current month is in the second half (Jul-Dec)");
-            }
-            if (x + requiredDays > EL_FIRST_HALF - y) {
-                logger.warn("User {} exceeded first half EL limit: used x={}, pending advance y={}, requested {}, available {}", user.getId(), x, y, requiredDays, EL_FIRST_HALF - y);
-                throw new RuntimeException("Cannot apply more than " + (EL_FIRST_HALF - y) + " EL days in the first half due to advance applications. Requested: " + requiredDays + ", Used: " + x);
-            }
-        } else {
-            if (currentMonth <= 6) {
-                double totalEligible = EL_TOTAL_ANNUAL;
-                if (x + y + requiredDays > totalEligible) {
-                    logger.warn("User {} exceeded annual EL limit for advance second half: used x={}, y={}, requested {}, totalEligible={}", user.getId(), x, y, requiredDays, totalEligible);
-                    throw new RuntimeException("Cannot apply more than " + (totalEligible - x - y) + " EL days in advance for the second half. Requested: " + requiredDays + ", Available: " + (totalEligible - x - y));
-                }
-            } else {
-                if (y + requiredDays > zEligible) {
-                    logger.warn("User {} exceeded second half EL limit: used y={}, requested {}, zEligible={}", user.getId(), y, requiredDays, zEligible);
-                    throw new RuntimeException("Cannot apply more than " + zEligible + " EL days in the second half. Requested: " + requiredDays + ", Used: " + y);
-                }
-                if (x + y + requiredDays > EL_TOTAL_ANNUAL) {
-                    logger.warn("User {} exceeded annual EL limit: used x={}, y={}, requested {}, limit {}", user.getId(), x, y, requiredDays, EL_TOTAL_ANNUAL);
-                    throw new RuntimeException("Total EL usage cannot exceed " + EL_TOTAL_ANNUAL + " days annually. Requested: " + requiredDays + ", Total used: " + (x + y));
-                }
-            }
-        }
     }
 
     @Override
@@ -451,12 +277,95 @@ public class LeaveServiceImpl implements LeaveService {
     }
 
     @Override
+    @Transactional
+    public void cancelLeave(Long leaveId) {
+        logger.info("Cancelling leave application with ID: {}", leaveId);
+        LeaveApplication leave = leaveApplicationRepository.findById(leaveId)
+                .orElseThrow(() -> new RuntimeException("Leave application not found"));
+        User currentUser = userService.getCurrentUser();
+
+        User approver = leave.getUser().getReportingTo();
+        if (approver == null || !approver.getId().equals(currentUser.getId())) {
+            logger.warn("User {} attempted to cancel leave {} they are not authorized for", currentUser.getId(), leaveId);
+            throw new RuntimeException("You are not authorized to cancel this leave");
+        }
+
+        if (!leave.getStatus().equals("APPROVED")) {
+            logger.warn("Leave application {} cannot be cancelled as it is not approved, current status: {}", leaveId, leave.getStatus());
+            throw new RuntimeException("Only approved leaves can be cancelled");
+        }
+
+        LocalDate currentDate = LocalDate.now();
+        LocalDate endDate = leave.getEndDate();
+        LocalDate cancellationDeadline = endDate.plusDays(15);
+        if (currentDate.isAfter(cancellationDeadline)) {
+            logger.warn("Leave application {} cannot be cancelled as it is past the 15-day window from end date {}", leaveId, endDate);
+            throw new RuntimeException("Leave cannot be cancelled after 15 days from the end date");
+        }
+
+        leave.setStatus("CANCELLED");
+        User user = leave.getUser();
+        if (!user.getRole().equals("ASSISTANT_DIRECTOR")) {
+            LeaveBalance leaveBalance = initializeLeaveBalance(user);
+            double requiredDays = calculateRequiredDays(leave.getLeaveType(), leave.getStartDate(),
+                    leave.getEndDate(), leave.isHalfDay());
+
+            if (leave.getLeaveType().equals("CL") || leave.getLeaveType().equals("HALF_DAY_CL")) {
+                leaveBalance.setCasualLeaveUsed(Math.max(0, leaveBalance.getCasualLeaveUsed() - requiredDays));
+                leaveBalance.setCasualLeaveRemaining(calculateAvailableCl(user, currentDate));
+            } else if (leave.getLeaveType().equals("EL") || leave.getLeaveType().equals("HALF_DAY_EL")) {
+                LocalDate startDate = leave.getStartDate();
+                if (startDate.getMonthValue() <= 6) {
+                    leaveBalance.setEarnedLeaveUsedFirstHalf(Math.max(0, leaveBalance.getEarnedLeaveUsedFirstHalf() - requiredDays));
+                } else {
+                    leaveBalance.setEarnedLeaveUsedSecondHalf(Math.max(0, leaveBalance.getEarnedLeaveUsedSecondHalf() - requiredDays));
+                }
+                leaveBalance.setEarnedLeaveRemaining(calculateAvailableEl(user, currentDate));
+            } else if (leave.getLeaveType().equals("ML")) {
+                leaveBalance.setMaternityLeaveUsed(Math.max(0, leaveBalance.getMaternityLeaveUsed() - requiredDays));
+                leaveBalance.setMaternityLeaveRemaining(182.0 - leaveBalance.getMaternityLeaveUsed());
+            } else if (leave.getLeaveType().equals("PL")) {
+                leaveBalance.setPaternityLeaveUsed(Math.max(0, leaveBalance.getPaternityLeaveUsed() - requiredDays));
+                leaveBalance.setPaternityLeaveRemaining(15.0 - leaveBalance.getPaternityLeaveUsed());
+            } else if (leave.getLeaveType().equals("LWP") || leave.getLeaveType().equals("HALF_DAY_LWP")) {
+                if (leave.getLeaveType().equals("LWP")) {
+                    user.setLeaveWithoutPayment(Math.max(0, user.getLeaveWithoutPayment() - requiredDays));
+                } else {
+                    user.setHalfDayLwp(Math.max(0, user.getHalfDayLwp() - requiredDays));
+                }
+            }
+
+            Map<String, Double> updatedBalance = calculateLeaveBalance(user);
+            String effectiveLeaveType = leave.getLeaveType();
+            if (leave.getLeaveType().equals("HALF_DAY_CL")) effectiveLeaveType = "CL";
+            else if (leave.getLeaveType().equals("HALF_DAY_EL")) effectiveLeaveType = "EL";
+            else if (leave.getLeaveType().equals("HALF_DAY_LWP")) effectiveLeaveType = "LWP";
+            leave.setRemainingLeaves(updatedBalance.getOrDefault(effectiveLeaveType, 0.0));
+        }
+
+        leaveApplicationRepository.save(leave);
+        userRepository.save(user);
+        logger.info("Leave cancelled for user: {}. Leave ID: {}, Type: {}", user.getId(), leaveId, leave.getLeaveType());
+    }
+
+    @Override
     public List<LeaveApplicationDTO> getPendingLeavesForCurrentUser() {
         User currentUser = userService.getCurrentUser();
         List<User> subordinates = currentUser.getSubordinates();
         List<Long> subordinateIds = subordinates.stream().map(User::getId).collect(Collectors.toList());
         List<LeaveApplication> pendingLeaves = leaveApplicationRepository.findByUserIdInAndStatus(subordinateIds, "PENDING");
         return pendingLeaves.stream().map(this::convertToDTO).collect(Collectors.toList());
+    }
+
+    @Override
+    public List<LeaveApplicationDTO> getCancellableLeavesForCurrentUser() {
+        logger.info("Fetching cancellable leaves for current user");
+        User currentUser = userService.getCurrentUser();
+        LocalDate currentDate = LocalDate.now();
+        LocalDate cancellationDeadline = currentDate.plusDays(15);
+        List<LeaveApplication> cancellableLeaves = leaveApplicationRepository.findCancellableLeavesByApproverId(
+                currentUser.getId(), currentDate, cancellationDeadline);
+        return cancellableLeaves.stream().map(this::convertToDTO).collect(Collectors.toList());
     }
 
     @Override
@@ -574,6 +483,260 @@ public class LeaveServiceImpl implements LeaveService {
         return result;
     }
 
+    @Override
+    public Map<String, Double> getAvailableClForMonth(int year, int month) {
+        User user = userService.getCurrentUser();
+        double availableCl = calculateAvailableClUpToMonth(user, month, year);
+        return Map.of("availableCl", availableCl);
+    }
+
+    private LeaveBalance initializeLeaveBalance(User user) {
+        LeaveBalance leaveBalance = user.getLeaveBalance();
+        if (leaveBalance == null) {
+            leaveBalance = new LeaveBalance();
+            user.setLeaveBalance(leaveBalance);
+        }
+        LocalDate joinDate = user.getJoinDate();
+        if (joinDate == null) {
+            logger.error("Join date is null for user: {}", user.getId());
+            throw new RuntimeException("User join date is not set. Please contact HR.");
+        }
+        int currentYear = LocalDate.now().getYear();
+        int joinYear = joinDate.getYear();
+        int joinMonth = joinDate.getMonthValue();
+
+        if (leaveBalance.getLastInitializedYear() == null || leaveBalance.getLastInitializedYear() != currentYear) {
+            leaveBalance.setCasualLeaveUsed(0.0);
+            leaveBalance.setMonthlyClAccrual(new HashMap<>());
+            leaveBalance.setLastInitializedYear(currentYear);
+        }
+
+        Map<Integer, Double> monthlyClAccrual = leaveBalance.getMonthlyClAccrual();
+        int startMonth = (joinYear == currentYear) ? joinMonth : 1;
+        for (int month = startMonth; month <= 12; month++) {
+            monthlyClAccrual.putIfAbsent(month, 1.0);
+        }
+        leaveBalance.setCasualLeaveRemaining(calculateAvailableCl(user, LocalDate.now()));
+
+        leaveBalance.setEarnedLeaveUsedFirstHalf(0.0);
+        leaveBalance.setEarnedLeaveUsedSecondHalf(0.0);
+        leaveBalance.setEarnedLeaveRemaining(calculateAvailableEl(user, LocalDate.now()));
+
+        if ("FEMALE".equalsIgnoreCase(user.getGender())) {
+            leaveBalance.setMaternityLeaveRemaining(182.0);
+            leaveBalance.setMaternityLeaveUsed(0.0);
+        } else {
+            leaveBalance.setPaternityLeaveRemaining(15.0);
+            leaveBalance.setPaternityLeaveUsed(0.0);
+        }
+        userRepository.save(user);
+        logger.info("Initialized leave balance for user {}: CL remaining={}, EL remaining={}",
+                user.getId(), leaveBalance.getCasualLeaveRemaining(), leaveBalance.getEarnedLeaveRemaining());
+        return leaveBalance;
+    }
+
+    private double calculateAvailableCl(User user, LocalDate date) {
+        LocalDate joinDate = user.getJoinDate();
+        if (joinDate == null) {
+            logger.error("Join date is null for user: {}", user.getId());
+            throw new RuntimeException("User join date is not set. Please contact HR.");
+        }
+        int currentYear = date.getYear();
+        int joinYear = joinDate.getYear();
+        int currentMonth = date.getMonthValue();
+        int joinMonth = joinDate.getMonthValue();
+
+        if (currentYear < joinYear) return 0.0;
+
+        LeaveBalance leaveBalance = user.getLeaveBalance();
+        Map<Integer, Double> monthlyClAccrual = leaveBalance.getMonthlyClAccrual();
+
+        double totalClAccrued = 0.0;
+        int endMonth = (joinYear == currentYear) ? Math.min(12, currentMonth) : currentMonth;
+        for (int month = (joinYear == currentYear) ? joinMonth : 1; month <= endMonth; month++) {
+            totalClAccrued += monthlyClAccrual.getOrDefault(month, 0.0);
+        }
+
+        double clUsed = calculateTotalUsedDays(user, List.of("CL", "HALF_DAY_CL"),
+                LocalDate.of(currentYear, 1, 1), LocalDate.of(currentYear, 12, 31), true);
+        double availableCl = Math.max(0, totalClAccrued - clUsed);
+        logger.info("Calculated available CL for user {} on {}: accrued {}, used (including pending) {}, available {}",
+                user.getId(), date, totalClAccrued, clUsed, availableCl);
+        return availableCl;
+    }
+
+    private double calculateAvailableClUpToMonth(User user, int targetMonth, int targetYear) {
+        LocalDate joinDate = user.getJoinDate();
+        if (joinDate == null) {
+            logger.error("Join date is null for user: {}", user.getId());
+            throw new RuntimeException("User join date is not set. Please contact HR.");
+        }
+        int joinYear = joinDate.getYear();
+        int joinMonth = joinDate.getMonthValue();
+
+        if (targetYear < joinYear || (targetYear == joinYear && targetMonth < joinMonth)) return 0.0;
+
+        LeaveBalance leaveBalance = user.getLeaveBalance();
+        Map<Integer, Double> monthlyClAccrual = leaveBalance.getMonthlyClAccrual();
+
+        double totalClAccrued = 0.0;
+        int endMonth = (joinYear == targetYear) ? Math.min(targetMonth, 12) : targetMonth;
+        for (int month = (joinYear == targetYear) ? joinMonth : 1; month <= endMonth; month++) {
+            totalClAccrued += monthlyClAccrual.getOrDefault(month, 0.0);
+        }
+
+        double clUsed = calculateTotalUsedDays(user, List.of("CL", "HALF_DAY_CL"),
+                LocalDate.of(targetYear, 1, 1), LocalDate.of(targetYear, 12, 31), true);
+        double availableCl = Math.max(0, totalClAccrued - clUsed);
+        logger.info("Calculated available CL for user {} up to {}-{}: accrued {}, used (including pending) {}, available {}",
+                user.getId(), targetMonth, targetYear, totalClAccrued, clUsed, availableCl);
+        return availableCl;
+    }
+
+    private double calculateAvailableEl(User user, LocalDate date) {
+        LocalDate joinDate = user.getJoinDate();
+        if (joinDate == null) {
+            logger.error("Join date is null for user: {}", user.getId());
+            throw new RuntimeException("User join date is not set. Please contact HR.");
+        }
+        int currentYear = date.getYear();
+        int joinYear = joinDate.getYear();
+        int currentMonth = date.getMonthValue();
+
+        logger.info("Calculating EL for user: {}, joinYear: {}, currentYear: {}, currentMonth: {}",
+                user.getId(), joinYear, currentYear, currentMonth);
+
+        LeaveBalance leaveBalance = user.getLeaveBalance();
+        if (leaveBalance == null) {
+            leaveBalance = initializeLeaveBalance(user);
+        }
+
+        double x = calculateTotalUsedDays(user, List.of("EL", "HALF_DAY_EL"),
+                LocalDate.of(currentYear, 1, 1), LocalDate.of(currentYear, 6, 30));
+        double y = calculateTotalUsedDays(user, List.of("EL", "HALF_DAY_EL"),
+                LocalDate.of(currentYear, 7, 1), LocalDate.of(currentYear, 12, 31), true);
+        double carryover = Math.max(0, EL_FIRST_HALF - x - y);
+
+        double available;
+        if (currentMonth <= 6) {
+            available = Math.max(0, EL_FIRST_HALF - x - y);
+        } else {
+            available = Math.max(0, (EL_SECOND_HALF + carryover) - y);
+        }
+
+        logger.info("EL calculation for user {}: x (first half used)={}, y (second half used including pending)={}, carryover={}, available={}",
+                user.getId(), x, y, carryover, available);
+
+        return available;
+    }
+
+    private void validateClApplication(User user, LocalDate startDate, LocalDate endDate, double requiredDays, double availableCl) {
+        LocalDate joinDate = user.getJoinDate();
+        if (joinDate == null) {
+            logger.error("Join date is null for user: {}", user.getId());
+            throw new RuntimeException("User join date is not set. Please contact HR.");
+        }
+        int currentYear = LocalDate.now().getYear();
+        int currentMonth = LocalDate.now().getMonthValue();
+        int applicationYear = startDate.getYear();
+        int applicationMonth = startDate.getMonthValue();
+        int joinYear = joinDate.getYear();
+        int joinMonth = joinDate.getMonthValue();
+
+        if (applicationYear > currentYear) {
+            logger.warn("User {} attempted to apply CL for future year {}", user.getId(), applicationYear);
+            throw new RuntimeException("Advance CL application is only allowed within the current year");
+        }
+
+        if (joinYear == currentYear && applicationMonth < joinMonth) {
+            logger.warn("User {} attempted to apply CL for month {} before join month {}", user.getId(), applicationMonth, joinMonth);
+            throw new RuntimeException("Cannot apply CL for a month before joining date");
+        }
+
+        double clUsedInMonth = calculateTotalUsedDays(user, List.of("CL", "HALF_DAY_CL"),
+                LocalDate.of(applicationYear, applicationMonth, 1),
+                LocalDate.of(applicationYear, applicationMonth, 1).plusMonths(1).minusDays(1), true);
+
+        if (clUsedInMonth + requiredDays > 1.0) {
+            logger.warn("User {} exceeded monthly CL limit for month {}: used {}, requested {}", user.getId(), applicationMonth, clUsedInMonth, requiredDays);
+            throw new RuntimeException("Cannot apply more than 1 CL in month " + startDate.getMonth() + ". Requested: " + requiredDays + ", Already used: " + clUsedInMonth);
+        }
+
+        List<LeaveApplication> existingLeaves = leaveApplicationRepository.findByUserAndLeaveTypeInAndStartDateBetween(
+                user, List.of("CL", "HALF_DAY_CL"),
+                LocalDate.of(currentYear, 1, 1), LocalDate.of(currentYear, 12, 31));
+
+        LocalDate latestClDate = existingLeaves.stream()
+                .filter(leave -> (leave.getStatus().equals("PENDING") || leave.getStatus().equals("APPROVED")) && leave.getStartDate().isAfter(LocalDate.now()))
+                .map(LeaveApplication::getStartDate)
+                .max(LocalDate::compareTo)
+                .orElse(null);
+
+        if (latestClDate != null && startDate.isBefore(latestClDate) && startDate.getMonthValue() != latestClDate.getMonthValue()) {
+            logger.warn("User {} attempted to apply CL before latest advance CL date {}", user.getId(), latestClDate);
+            throw new RuntimeException("Cannot apply CL before the latest advance CL application date: " + latestClDate + " unless applying for the same month");
+        }
+
+        double availableForApplicationMonth = calculateAvailableClUpToMonth(user, applicationMonth, applicationYear);
+        if (availableForApplicationMonth < requiredDays) {
+            logger.warn("User {} insufficient CL balance for month {}: requested {}, available {}", user.getId(), applicationMonth, requiredDays, availableForApplicationMonth);
+            throw new RuntimeException("Insufficient CL balance for month " + startDate.getMonth() +
+                    ". Requested: " + requiredDays + ", Available: " + availableForApplicationMonth);
+        }
+    }
+
+    private void validateElApplication(User user, LocalDate startDate, double requiredDays, double availableEl) {
+        int currentMonth = LocalDate.now().getMonthValue();
+        int applicationMonth = startDate.getMonthValue();
+        LocalDate joinDate = user.getJoinDate();
+        if (joinDate == null) {
+            logger.error("Join date is null for user: {}", user.getId());
+            throw new RuntimeException("User join date is not set. Please contact HR.");
+        }
+        int joinYear = joinDate.getYear();
+        int currentYear = LocalDate.now().getYear();
+
+        if (startDate.getYear() > currentYear) {
+            logger.warn("User {} attempted to apply EL for future year {}", user.getId(), startDate.getYear());
+            throw new RuntimeException("Advance EL application is only allowed within the current year");
+        }
+
+        double x = calculateTotalUsedDays(user, List.of("EL", "HALF_DAY_EL"),
+                LocalDate.of(currentYear, 1, 1), LocalDate.of(currentYear, 6, 30));
+        double y = calculateTotalUsedDays(user, List.of("EL", "HALF_DAY_EL"),
+                LocalDate.of(currentYear, 7, 1), LocalDate.of(currentYear, 12, 31), true);
+        double carryover = Math.max(0, EL_FIRST_HALF - x - y);
+        double zEligible = EL_SECOND_HALF + carryover;
+
+        if (applicationMonth <= 6) {
+            if (currentMonth > 6) {
+                logger.warn("User {} attempted to apply EL for first half (month {}) in second half (month {})", user.getId(), applicationMonth, currentMonth);
+                throw new RuntimeException("Cannot apply EL for the first half (Jan-Jun) when current month is in the second half (Jul-Dec)");
+            }
+            if (x + requiredDays > EL_FIRST_HALF - y) {
+                logger.warn("User {} exceeded first half EL limit: used x={}, pending advance y={}, requested {}, available {}", user.getId(), x, y, requiredDays, EL_FIRST_HALF - y);
+                throw new RuntimeException("Cannot apply more than " + (EL_FIRST_HALF - y) + " EL days in the first half due to advance applications. Requested: " + requiredDays + ", Used: " + x);
+            }
+        } else {
+            if (currentMonth <= 6) {
+                double totalEligible = EL_TOTAL_ANNUAL;
+                if (x + y + requiredDays > totalEligible) {
+                    logger.warn("User {} exceeded annual EL limit for advance second half: used x={}, y={}, requested {}, totalEligible={}", user.getId(), x, y, requiredDays, totalEligible);
+                    throw new RuntimeException("Cannot apply more than " + (totalEligible - x - y) + " EL days in advance for the second half. Requested: " + requiredDays + ", Available: " + (totalEligible - x - y));
+                }
+            } else {
+                if (y + requiredDays > zEligible) {
+                    logger.warn("User {} exceeded second half EL limit: used y={}, requested {}, zEligible={}", user.getId(), y, requiredDays, zEligible);
+                    throw new RuntimeException("Cannot apply more than " + zEligible + " EL days in the second half. Requested: " + requiredDays + ", Used: " + y);
+                }
+                if (x + y + requiredDays > EL_TOTAL_ANNUAL) {
+                    logger.warn("User {} exceeded annual EL limit: used x={}, y={}, requested {}, limit {}", user.getId(), x, y, requiredDays, EL_TOTAL_ANNUAL);
+                    throw new RuntimeException("Total EL usage cannot exceed " + EL_TOTAL_ANNUAL + " days annually. Requested: " + requiredDays + ", Total used: " + (x + y));
+                }
+            }
+        }
+    }
+
     private double calculateTotalUsedDays(User user, List<String> leaveTypes) {
         int currentYear = LocalDate.now().getYear();
         return calculateTotalUsedDays(user, leaveTypes,
@@ -614,14 +777,12 @@ public class LeaveServiceImpl implements LeaveService {
             return 0.0;
         }
 
-        // For EL, ML, PL: count all days including holidays (sandwich leave rule)
         if (leaveType.equals("EL") || leaveType.equals("ML") || leaveType.equals("PL")) {
             long totalDays = startDate.datesUntil(endDate.plusDays(1)).count();
             logger.info("{} leave: counted {} days including holidays (sandwich rule)", leaveType, totalDays);
             return (double) totalDays;
         }
 
-        // For CL and LWP: exclude holidays
         double totalDays = 0.0;
         LocalDate currentDate = startDate;
         while (!currentDate.isAfter(endDate)) {

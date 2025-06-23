@@ -45,8 +45,7 @@ public interface LeaveApplicationRepository extends JpaRepository<LeaveApplicati
 
     @Query("SELECT la FROM LeaveApplication la WHERE la.user = :user " +
             "AND la.status IN ('PENDING', 'APPROVED') " +
-            "AND la.startDate <= :endDate " +
-            "AND la.endDate >= :startDate")
+            "AND la.startDate <= :endDate AND la.endDate >= :startDate")
     List<LeaveApplication> findOverlappingLeaves(
             @Param("user") User user,
             @Param("startDate") LocalDate startDate,
@@ -64,4 +63,11 @@ public interface LeaveApplicationRepository extends JpaRepository<LeaveApplicati
 
     @Query("SELECT COUNT(la) FROM LeaveApplication la WHERE la.user.id IN :userIds AND la.status = :status")
     long countByUserIdInAndStatus(@Param("userIds") List<Long> userIds, @Param("status") String status);
+
+    @Query("SELECT la FROM LeaveApplication la WHERE la.approverId = :approverId AND la.status = 'APPROVED' " +
+            "AND la.endDate >= :currentDate AND la.endDate <= :cancellationDeadline")
+    List<LeaveApplication> findCancellableLeavesByApproverId(
+            @Param("approverId") Long approverId,
+            @Param("currentDate") LocalDate currentDate,
+            @Param("cancellationDeadline") LocalDate cancellationDeadline);
 }
