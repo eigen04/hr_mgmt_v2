@@ -35,7 +35,6 @@ public class LeaveController {
         logger.debug("Request Headers: {}", Collections.list(request.getHeaderNames()).stream()
                 .collect(Collectors.toMap(name -> name, request::getHeader)));
         try {
-            application.setUser(null);
             LeaveApplication savedApplication = leaveService.applyLeave(application);
             return ResponseEntity.ok(savedApplication);
         } catch (RuntimeException e) {

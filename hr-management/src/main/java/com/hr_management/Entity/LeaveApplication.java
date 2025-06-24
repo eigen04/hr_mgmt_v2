@@ -26,7 +26,7 @@ public class LeaveApplication {
     private LocalDate appliedOn;
     private double remainingLeaves;
 
-    @Column(name = "approver_id")
+    @Column(name = "approver_id", nullable = true)
     private Long approverId;
 
     // Getters and Setters

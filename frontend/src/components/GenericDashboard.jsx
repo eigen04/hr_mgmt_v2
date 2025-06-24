@@ -308,10 +308,23 @@ export default function GenericDashboard() {
         setError('');
         setSuccessMessage('');
 
-        if (leaveFormData.startDate && leaveFormData.startDate < today) {
-            setError('Start date cannot be in the past');
-            setIsSubmitting(false);
-            return;
+        if (leaveFormData.startDate) {
+            const selectedDate = new Date(leaveFormData.startDate);
+            const todayDate = new Date(today);
+            const earliestAllowedDate = new Date(todayDate.setDate(todayDate.getDate() - 6));
+            if (leaveFormData.leaveType === 'CL' || leaveFormData.leaveType === 'HALF_DAY_CL') {
+                if (selectedDate < earliestAllowedDate) {
+                    setError('Casual leave can only be applied for dates within the last 6 days, including today');
+                    setIsSubmitting(false);
+                    return;
+                }
+            } else {
+                if (selectedDate < new Date(today)) {
+                    setError('Start date cannot be in the past for non-casual leave types');
+                    setIsSubmitting(false);
+                    return;
+                }
+            }
         }
 
         if (!leaveFormData.startDate || !leaveFormData.reason) {
