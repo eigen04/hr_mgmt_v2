@@ -283,13 +283,18 @@ export default function GenericDashboard() {
         });
     };
 
-    const calculateAvailableClForMonth = (applicationMonth) => {
+    const calculateAvailableClForMonth = (applicationMonth, applicationYear) => {
         const joinDate = new Date(userData?.joinDate);
         const joinYear = joinDate.getFullYear();
         const joinMonth = joinDate.getMonth() + 1;
         let totalClAccrued = 0;
-        const endMonth = joinYear === currentYear ? Math.min(12, applicationMonth) : applicationMonth;
-        const startMonth = joinYear === currentYear ? joinMonth : 1;
+
+        if (applicationYear < joinYear || (applicationYear === joinYear && applicationMonth < joinMonth)) {
+            return 0;
+        }
+
+        const endMonth = (joinYear === applicationYear) ? Math.min(applicationMonth, 12) : applicationMonth;
+        const startMonth = (joinYear === applicationYear) ? joinMonth : 1;
 
         for (let month = startMonth; month <= endMonth; month++) {
             totalClAccrued += 1;
@@ -297,7 +302,9 @@ export default function GenericDashboard() {
 
         const totalUsedCl = leaveApplications
             .filter(app => (app.leaveType === 'CL' || app.leaveType === 'HALF_DAY_CL') &&
-                (app.status === 'APPROVED' || app.status === 'PENDING'))
+                (app.status === 'APPROVED' || app.status === 'PENDING') &&
+                new Date(app.startDate).getFullYear() === applicationYear &&
+                new Date(app.startDate).getMonth() + 1 <= applicationMonth)
             .reduce((total, app) => total + calculateLeaveDays(app.startDate, app.endDate, app.leaveType), 0);
 
         return Math.max(0, totalClAccrued - totalUsedCl);
@@ -397,8 +404,8 @@ export default function GenericDashboard() {
             const joinYear = joinDate.getFullYear();
             const joinMonth = joinDate.getMonth() + 1;
 
-            if (applicationYear > currentYear) {
-                setError('Advance CL application is only allowed within the current year');
+            if (applicationYear > currentYear || (applicationYear === currentYear && applicationMonth > currentMonth)) {
+                setError('CL application is only allowed up to the current month');
                 setIsSubmitting(false);
                 return;
             }
@@ -409,68 +416,27 @@ export default function GenericDashboard() {
                 return;
             }
 
-            const availableClForMonth = calculateAvailableClForMonth(applicationMonth);
-            const totalUsedCl = leaveApplications
-                .filter(app => (app.leaveType === 'CL' || app.leaveType === 'HALF_DAY_CL') &&
-                    (app.status === 'APPROVED' || app.status === 'PENDING'))
-                .reduce((total, app) => total + calculateLeaveDays(app.startDate, app.endDate, app.leaveType), 0);
-            const totalClCommitted = totalUsedCl + leaveDays;
-
-            if (applicationMonth <= currentMonth) {
-                const accruedClUpToCurrent = userData?.accruedCl || 0;
-                if (totalClCommitted > accruedClUpToCurrent) {
-                    setError(`Total CL exceeds accrued CL: ${accruedClUpToCurrent.toFixed(1)}`);
+            try {
+                const token = localStorage.getItem('authToken');
+                const response = await fetch(`http://localhost:8081/api/leaves/available-cl/${applicationYear}/${applicationMonth}`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+                if (response.ok) {
+                    const availableCl = await response.json();
+                    const availableClForMonth = availableCl.availableCl || 0;
+                    if (availableClForMonth < leaveDays) {
+                        setError(`Insufficient CL balance for ${startDate.toLocaleString('default', { month: 'long' })}: ${availableClForMonth.toFixed(1)}`);
+                        setIsSubmitting(false);
+                        return;
+                    }
+                } else {
+                    setError('Failed to fetch available CL balance.');
                     setIsSubmitting(false);
                     return;
                 }
-            } else {
-                if (totalClCommitted > 12) {
-                    setError('Total CL exceeds annual limit of 12 days');
-                    setIsSubmitting(false);
-                    return;
-                }
-            }
-
-            if (availableClForMonth < leaveDays) {
-                setError(`Insufficient CL balance for ${startDate.toLocaleString('default', {month: 'long'})}: ${availableClForMonth.toFixed(1)}`);
-                setIsSubmitting(false);
-                return;
-            }
-        }
-
-        if (leaveFormData.leaveType === 'EL' || leaveFormData.leaveType === 'HALF_DAY_EL') {
-            const startDate = new Date(leaveFormData.startDate);
-            const applicationMonth = startDate.getMonth() + 1;
-            const totalEligible = EL_FIRST_HALF + EL_SECOND_HALF;
-            const totalUsed = leaveBalance.earnedLeave.usedFirstHalf + leaveBalance.earnedLeave.usedSecondHalf;
-
-            if (applicationMonth <= 6 && currentMonth <= 6) {
-                const firstHalfAvailable = EL_FIRST_HALF - leaveBalance.earnedLeave.usedSecondHalf;
-                if (leaveBalance.earnedLeave.usedFirstHalf + leaveDays > firstHalfAvailable) {
-                    setError(`Cannot apply more than ${firstHalfAvailable.toFixed(1)} EL days in the first half`);
-                    setIsSubmitting(false);
-                    return;
-                }
-            } else if (applicationMonth > 6 && currentMonth <= 6) {
-                if (totalUsed + leaveDays > totalEligible) {
-                    setError(`Cannot apply more than ${(totalEligible - totalUsed).toFixed(1)} EL days in advance`);
-                    setIsSubmitting(false);
-                    return;
-                }
-            } else if (applicationMonth > 6 && currentMonth > 6) {
-                const secondHalfEligible = EL_SECOND_HALF + leaveBalance.earnedLeave.carryover;
-                if (leaveBalance.earnedLeave.usedSecondHalf + leaveDays > secondHalfEligible) {
-                    setError(`Cannot apply more than ${secondHalfEligible.toFixed(1)} EL days in the second half`);
-                    setIsSubmitting(false);
-                    return;
-                }
-                if (totalUsed + leaveDays > totalEligible) {
-                    setError(`Total EL usage cannot exceed ${totalEligible.toFixed(1)} days annually`);
-                    setIsSubmitting(false);
-                    return;
-                }
-            } else if (applicationMonth <= 6 && currentMonth > 6) {
-                setError('Cannot apply EL for first half when current month is in second half');
+            } catch (err) {
+                console.error('Error fetching available CL:', err);
+                setError('An error occurred while checking CL balance.');
                 setIsSubmitting(false);
                 return;
             }
@@ -532,36 +498,9 @@ export default function GenericDashboard() {
             });
 
             if (response.ok) {
-                const startDate = new Date(leaveFormData.startDate);
-                const applicationMonth = startDate.getMonth() + 1;
-                let message = `Leave application submitted successfully! Awaiting approval from ${
+                setSuccessMessage(`Leave application submitted successfully! Awaiting approval from ${
                     userData?.reportingTo?.fullName || 'your reporting manager'
-                }.`;
-                if (
-                    (leaveFormData.leaveType === 'CL' || leaveFormData.leaveType === 'HALF_DAY_CL') &&
-                    applicationMonth > currentMonth
-                ) {
-                    const totalClCommitted = leaveApplications
-                        .filter(app => (app.leaveType === 'CL' || app.leaveType === 'HALF_DAY_CL') &&
-                            (app.status === 'APPROVED' || app.status === 'PENDING'))
-                        .reduce((total, app) => total + calculateLeaveDays(app.startDate, app.endDate, app.leaveType), 0) + leaveDays;
-                    const remainingTotal = leaveBalance.casualLeave.total - totalClCommitted;
-                    message += ` Total CL balance after approval: ${remainingTotal.toFixed(1)} days.`;
-                }
-                if (
-                    (leaveFormData.leaveType === 'EL' || leaveFormData.leaveType === 'HALF_DAY_EL') &&
-                    applicationMonth > 6 &&
-                    currentMonth <= 6
-                ) {
-                    const remainingTotal =
-                        leaveBalance.earnedLeave.total -
-                        leaveBalance.earnedLeave.usedFirstHalf -
-                        leaveBalance.earnedLeave.usedSecondHalf -
-                        leaveDays;
-                    message += ` Total EL balance after approval: ${remainingTotal.toFixed(1)} days.`;
-                }
-
-                setSuccessMessage(message);
+                }.`);
                 setLeaveFormData({
                     leaveType: 'CL',
                     startDate: '',
@@ -571,38 +510,49 @@ export default function GenericDashboard() {
                 setLeaveDays(0);
                 setActiveView('leave-applications');
 
-                const balanceResponse = await fetch('http://localhost:8081/api/leaves/balance', {
-                    headers: {Authorization: `Bearer ${token}`},
-                });
-                if (balanceResponse.ok) {
-                    const balanceData = await balanceResponse.json();
-                    const sanitizedBalance = {
-                        casualLeave: balanceData.casualLeave || {total: 12, used: 0, remaining: 0},
-                        earnedLeave: balanceData.earnedLeave || {
-                            total: 20, used: 0, remaining: 0, usedFirstHalf: 0, usedSecondHalf: 0, carryover: 0,
-                        },
-                        maternityLeave: balanceData.maternityLeave || {total: 182, used: 0, remaining: 182},
-                        paternityLeave: balanceData.paternityLeave || {total: 15, used: 0, remaining: 15},
-                        leaveWithoutPay: balanceData.leaveWithoutPay || {total: 300, used: 0, remaining: 300},
-                    };
-                    Object.keys(sanitizedBalance).forEach((key) => {
-                        sanitizedBalance[key].used = Number((sanitizedBalance[key].used || 0).toFixed(1));
-                        sanitizedBalance[key].remaining = Number((sanitizedBalance[key].remaining || 0).toFixed(1));
-                        if (key === 'earnedLeave') {
-                            sanitizedBalance[key].usedFirstHalf = Number((sanitizedBalance[key].usedFirstHalf || 0).toFixed(1));
-                            sanitizedBalance[key].usedSecondHalf = Number((sanitizedBalance[key].usedSecondHalf || 0).toFixed(1));
-                            sanitizedBalance[key].carryover = Number((sanitizedBalance[key].carryover || 0).toFixed(1));
-                        }
+                // Re-fetch leave balance and applications to ensure latest data
+                try {
+                    const balanceResponse = await fetch('http://localhost:8081/api/leaves/balance', {
+                        headers: { Authorization: `Bearer ${token}` },
                     });
-                    setLeaveBalance(sanitizedBalance);
-                }
+                    if (balanceResponse.ok) {
+                        const balanceData = await balanceResponse.json();
+                        const sanitizedBalance = {
+                            casualLeave: balanceData.casualLeave || { total: 12, used: 0, remaining: 0 },
+                            earnedLeave: balanceData.earnedLeave || {
+                                total: 20,
+                                used: 0,
+                                remaining: 0,
+                                usedFirstHalf: 0,
+                                usedSecondHalf: 0,
+                                carryover: 0,
+                            },
+                            maternityLeave: balanceData.maternityLeave || { total: 182, used: 0, remaining: 182 },
+                            paternityLeave: balanceData.paternityLeave || { total: 15, used: 0, remaining: 15 },
+                            leaveWithoutPay: balanceData.leaveWithoutPay || { total: 300, used: 0, remaining: 300 },
+                        };
+                        Object.keys(sanitizedBalance).forEach((key) => {
+                            sanitizedBalance[key].used = Number((sanitizedBalance[key].used || 0).toFixed(1));
+                            sanitizedBalance[key].remaining = Number((sanitizedBalance[key].remaining || 0).toFixed(1));
+                            if (key === 'earnedLeave') {
+                                sanitizedBalance[key].usedFirstHalf = Number((sanitizedBalance[key].usedFirstHalf || 0).toFixed(1));
+                                sanitizedBalance[key].usedSecondHalf = Number((sanitizedBalance[key].usedSecondHalf || 0).toFixed(1));
+                                sanitizedBalance[key].carryover = Number((sanitizedBalance[key].carryover || 0).toFixed(1));
+                            }
+                        });
+                        setLeaveBalance(sanitizedBalance);
+                    }
 
-                const applicationsResponse = await fetch('http://localhost:8081/api/leaves', {
-                    headers: {Authorization: `Bearer ${token}`},
-                });
-                if (applicationsResponse.ok) {
-                    const applicationsData = await applicationsResponse.json();
-                    setLeaveApplications(applicationsData);
+                    const applicationsResponse = await fetch('http://localhost:8081/api/leaves', {
+                        headers: { Authorization: `Bearer ${token}` },
+                    });
+                    if (applicationsResponse.ok) {
+                        const applicationsData = await applicationsResponse.json();
+                        setLeaveApplications(applicationsData);
+                    }
+                } catch (err) {
+                    console.error('Error refreshing leave data:', err);
+                    setError('An error occurred while refreshing leave data.');
                 }
             } else {
                 let errorMessage = 'Failed to submit leave application';
@@ -771,13 +721,6 @@ export default function GenericDashboard() {
                     textColor: 'text-green-600'
                 },
             ],
-            note: leaveApplications.some(app => (app.leaveType === 'CL' || app.leaveType === 'HALF_DAY_CL') &&
-                app.status === 'PENDING' && new Date(app.startDate).getMonth() + 1 > currentMonth)
-                ? `Pending advance CL applications exist. Total CL after approval: ${(leaveBalance.casualLeave.total - leaveApplications
-                    .filter(app => (app.leaveType === 'CL' || app.leaveType === 'HALF_DAY_CL') &&
-                        (app.status === 'APPROVED' || app.status === 'PENDING'))
-                    .reduce((total, app) => total + calculateLeaveDays(app.startDate, app.endDate, app.leaveType), 0)).toFixed(1)} days.`
-                : null,
         },
         {
             key: 'earned-leave',
@@ -908,7 +851,6 @@ export default function GenericDashboard() {
     const renderApplyLeaveView = () => {
         const isHalfDay = leaveFormData.leaveType === 'HALF_DAY_CL' || leaveFormData.leaveType === 'HALF_DAY_EL' || leaveFormData.leaveType === 'HALF_DAY_LWP';
         const isFixedDuration = leaveFormData.leaveType === 'ML' || leaveFormData.leaveType === 'PL';
-        const applicationMonth = leaveFormData.startDate ? new Date(leaveFormData.startDate).getMonth() + 1 : null;
         const minDate = (leaveFormData.leaveType === 'CL' || leaveFormData.leaveType === 'HALF_DAY_CL')
             ? new Date(new Date().setDate(new Date().getDate() - 6)).toISOString().split('T')[0]
             : today;
@@ -921,18 +863,6 @@ export default function GenericDashboard() {
                         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
                             <p className="text-sm text-yellow-800 font-medium">
                                 Pending advance EL: {leaveBalance.earnedLeave.usedSecondHalf.toFixed(1)} days.
-                            </p>
-                        </div>
-                    )}
-                    {(leaveFormData.leaveType === 'CL' || leaveFormData.leaveType === 'HALF_DAY_CL') && applicationMonth > currentMonth && (
-                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
-                            <p className="text-sm text-yellow-800 font-medium">
-                                Advance CL
-                                for {new Date(leaveFormData.startDate).toLocaleString('default', {month: 'long'})}: {(leaveApplications
-                                .filter(app => (app.leaveType === 'CL' || app.leaveType === 'HALF_DAY_CL') &&
-                                    (app.status === 'APPROVED' || app.status === 'PENDING'))
-                                .reduce((total, app) => total + calculateLeaveDays(app.startDate, app.endDate, app.leaveType), 0) + leaveDays).toFixed(1)} days
-                                committed.
                             </p>
                         </div>
                     )}
@@ -988,16 +918,14 @@ export default function GenericDashboard() {
                                 </select>
                                 {leaveBalance[leaveTypeMap[leaveFormData.leaveType]]?.remaining <= 0 && !['EL', 'HALF_DAY_EL', 'CL', 'HALF_DAY_CL'].includes(leaveFormData.leaveType) && (
                                     <div className="text-red-600 text-sm mt-1">
-                                        No
-                                        remaining {leaveFormData.leaveType.replace(/_/g, ' ').toLowerCase()} available.
+                                        No remaining {leaveFormData.leaveType.replace(/_/g, ' ').toLowerCase()} available.
                                     </div>
                                 )}
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
                                 <div className="relative">
-                                    <div
-                                        className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                         <Calendar size={18} className="text-gray-400"/>
                                     </div>
                                     <input
@@ -1027,8 +955,7 @@ export default function GenericDashboard() {
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
                                     <div className="relative">
-                                        <div
-                                            className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                             <Calendar size={18} className="text-gray-400"/>
                                         </div>
                                         <input
@@ -1054,8 +981,7 @@ export default function GenericDashboard() {
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
                                     <div className="relative">
-                                        <div
-                                            className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                             <Calendar size={18} className="text-gray-400"/>
                                         </div>
                                         <input
@@ -1115,10 +1041,8 @@ export default function GenericDashboard() {
                         >
                             {isSubmitting ? (
                                 <span className="flex items-center">
-                                <svg className="animate-spin h-5 w-5 mr-2 text-white" xmlns="http://www.w3.org/2000/svg"
-                                     fill="none" viewBox="0 0 24 24">
-                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
-                                            strokeWidth="4"></circle>
+                                <svg className="animate-spin h-5 w-5 mr-2 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
                                 </svg>
                                 Submitting...
@@ -1161,7 +1085,6 @@ export default function GenericDashboard() {
                                     <th className="text-left py-3 px-4 font-medium text-gray-700">End Date</th>
                                     <th className="text-left py-3 px-4 font-medium text-gray-700">Status</th>
                                     <th className="text-left py-3 px-4 font-medium text-gray-700">Applied On</th>
-                                    <th className="text-left py-3 px-4 font-medium text-gray-700">Remaining</th>
                                     <th className="text-left py-3 px-4 font-medium text-gray-700">Reason</th>
                                 </tr>
                                 </thead>
@@ -1185,7 +1108,6 @@ export default function GenericDashboard() {
                                             </span>
                                         </td>
                                         <td className="py-3 px-4">{formatDate(application.appliedOn)}</td>
-                                        <td className="py-3 px-4">{(application.remainingLeaves != null ? application.remainingLeaves : 0).toFixed(1)}</td>
                                         <td className="py-3 px-4">{application.reason || 'N/A'}</td>
                                     </tr>
                                 ))}

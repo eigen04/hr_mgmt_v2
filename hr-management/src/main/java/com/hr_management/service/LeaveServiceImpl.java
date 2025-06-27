@@ -47,6 +47,18 @@ public class LeaveServiceImpl implements LeaveService {
         logger.info("Applying leave for user: {}, type: {}", userService.getCurrentUser().getId(), application.getLeaveType());
         User user = userService.getCurrentUser();
 
+        // Validate that join date is set and leave start date is not before join date
+        LocalDate joinDate = user.getJoinDate();
+        if (joinDate == null) {
+            logger.error("Join date is null for user: {}", user.getId());
+            throw new RuntimeException("User join date is not set. Please contact HR.");
+        }
+        if (application.getStartDate().isBefore(joinDate)) {
+            logger.warn("User {} attempted to apply leave starting on {} before join date {}",
+                    user.getId(), application.getStartDate(), joinDate);
+            throw new RuntimeException("No leave is allowed before the joining date: " + joinDate);
+        }
+
         if (user.getRole().equals("ADMIN")) {
             logger.warn("Admin {} attempted to apply for leave", user.getId());
             throw new RuntimeException("As the Director, you cannot apply for leaves.");
@@ -212,8 +224,8 @@ public class LeaveServiceImpl implements LeaveService {
                 leave.getEndDate(), leave.isHalfDay());
 
         LeaveBalance leaveBalance = initializeLeaveBalance(user);
+        LocalDate currentDate = LocalDate.now();
         if (leave.getLeaveType().equals("CL") || leave.getLeaveType().equals("HALF_DAY_CL")) {
-            LocalDate currentDate = LocalDate.now();
             if (!leave.getStartDate().isAfter(currentDate)) {
                 leaveBalance.setCasualLeaveUsed(leaveBalance.getCasualLeaveUsed() + requiredDays);
             }
@@ -225,7 +237,7 @@ public class LeaveServiceImpl implements LeaveService {
             } else {
                 leaveBalance.setEarnedLeaveUsedSecondHalf(leaveBalance.getEarnedLeaveUsedSecondHalf() + requiredDays);
             }
-            leaveBalance.setEarnedLeaveRemaining(calculateAvailableEl(user, LocalDate.now()));
+            leaveBalance.setEarnedLeaveRemaining(calculateAvailableEl(user, currentDate));
         } else if (leave.getLeaveType().equals("ML")) {
             leaveBalance.setMaternityLeaveUsed(leaveBalance.getMaternityLeaveUsed() + requiredDays);
             leaveBalance.setMaternityLeaveRemaining(182.0 - leaveBalance.getMaternityLeaveUsed());
@@ -335,7 +347,7 @@ public class LeaveServiceImpl implements LeaveService {
 
         leaveApplicationRepository.save(leave);
         userRepository.save(user);
-        logger.info("Leave cancelled for user: {}. Leave ID: {}, Type: {}", user.getId(), leaveId, leave.getLeaveType());
+        logger.info("Leave cancelled for user: {}. Leave ID: {}, Type: {}, Days: {}", user.getId(), leaveId, leave.getLeaveType());
     }
 
     @Override
@@ -391,7 +403,7 @@ public class LeaveServiceImpl implements LeaveService {
         int currentMonth = currentDate.getMonthValue();
 
         double clUsed = calculateTotalUsedDays(user, List.of("CL", "HALF_DAY_CL"),
-                LocalDate.of(currentYear, 1, 1), currentDate, true);
+                LocalDate.of(currentYear, 1, 1), LocalDate.of(currentYear, 12, 31), false);
         double x = calculateTotalUsedDays(user, List.of("EL", "HALF_DAY_EL"),
                 LocalDate.of(currentYear, 1, 1), LocalDate.of(currentYear, 6, 30), false);
         double y = calculateTotalUsedDays(user, List.of("EL", "HALF_DAY_EL"),
@@ -513,11 +525,11 @@ public class LeaveServiceImpl implements LeaveService {
         leaveBalance.setEarnedLeaveRemaining(calculateAvailableEl(user, LocalDate.now()));
 
         if ("FEMALE".equalsIgnoreCase(user.getGender())) {
-            leaveBalance.setMaternityLeaveRemaining(182.0);
             leaveBalance.setMaternityLeaveUsed(0.0);
+            leaveBalance.setMaternityLeaveRemaining(182.0);
         } else {
-            leaveBalance.setPaternityLeaveRemaining(15.0);
             leaveBalance.setPaternityLeaveUsed(0.0);
+            leaveBalance.setPaternityLeaveRemaining(15.0);
         }
         userRepository.save(user);
         logger.info("Initialized leave balance for user {}: CL remaining={}, EL remaining={}",
@@ -532,8 +544,8 @@ public class LeaveServiceImpl implements LeaveService {
             throw new RuntimeException("User join date is not set. Please contact HR.");
         }
         int currentYear = date.getYear();
-        int joinYear = joinDate.getYear();
         int currentMonth = date.getMonthValue();
+        int joinYear = joinDate.getYear();
         int joinMonth = joinDate.getMonthValue();
 
         if (currentYear < joinYear) return 0.0;
@@ -548,9 +560,9 @@ public class LeaveServiceImpl implements LeaveService {
         }
 
         double clUsed = calculateTotalUsedDays(user, List.of("CL", "HALF_DAY_CL"),
-                LocalDate.of(currentYear, 1, 1), LocalDate.of(currentYear, 12, 31), true);
+                LocalDate.of(currentYear, 1, 1), LocalDate.of(currentYear, 12, 31), false);
         double availableCl = Math.max(0, totalClAccrued - clUsed);
-        logger.info("Calculated available CL for user {} on {}: accrued {}, used (including pending) {}, available {}",
+        logger.info("Calculated available CL for user {} on {}: accrued {}, used (approved only) {}, available {}",
                 user.getId(), date, totalClAccrued, clUsed, availableCl);
         return availableCl;
     }
@@ -576,9 +588,9 @@ public class LeaveServiceImpl implements LeaveService {
         }
 
         double clUsed = calculateTotalUsedDays(user, List.of("CL", "HALF_DAY_CL"),
-                LocalDate.of(targetYear, 1, 1), LocalDate.of(targetYear, 12, 31), true);
+                LocalDate.of(targetYear, 1, 1), LocalDate.of(targetYear, targetMonth, LocalDate.now().getDayOfMonth()), false);
         double availableCl = Math.max(0, totalClAccrued - clUsed);
-        logger.info("Calculated available CL for user {} up to {}-{}: accrued {}, used (including pending) {}, available {}",
+        logger.info("Calculated available CL for user {} up to {}-{}: accrued {}, used (approved only) {}, available {}",
                 user.getId(), targetMonth, targetYear, totalClAccrued, clUsed, availableCl);
         return availableCl;
     }
@@ -633,38 +645,14 @@ public class LeaveServiceImpl implements LeaveService {
         int joinYear = joinDate.getYear();
         int joinMonth = joinDate.getMonthValue();
 
-        if (applicationYear > currentYear) {
-            logger.warn("User {} attempted to apply CL for future year {}", user.getId(), applicationYear);
-            throw new RuntimeException("Advance CL application is only allowed within the current year");
+        if (applicationYear > currentYear || (applicationYear == currentYear && applicationMonth > currentMonth)) {
+            logger.warn("User {} attempted to apply CL for future period {}-{}", user.getId(), applicationMonth, applicationYear);
+            throw new RuntimeException("CL application is only allowed up to the current month");
         }
 
         if (joinYear == currentYear && applicationMonth < joinMonth) {
             logger.warn("User {} attempted to apply CL for month {} before join month {}", user.getId(), applicationMonth, joinMonth);
             throw new RuntimeException("Cannot apply CL for a month before joining date");
-        }
-
-        double clUsedInMonth = calculateTotalUsedDays(user, List.of("CL", "HALF_DAY_CL"),
-                LocalDate.of(applicationYear, applicationMonth, 1),
-                LocalDate.of(applicationYear, applicationMonth, 1).plusMonths(1).minusDays(1), true);
-
-        if (clUsedInMonth + requiredDays > 1.0) {
-            logger.warn("User {} exceeded monthly CL limit for month {}: used {}, requested {}", user.getId(), applicationMonth, clUsedInMonth, requiredDays);
-            throw new RuntimeException("Cannot apply more than 1 CL in month " + startDate.getMonth() + ". Requested: " + requiredDays + ", Already used: " + clUsedInMonth);
-        }
-
-        List<LeaveApplication> existingLeaves = leaveApplicationRepository.findByUserAndLeaveTypeInAndStartDateBetween(
-                user, List.of("CL", "HALF_DAY_CL"),
-                LocalDate.of(currentYear, 1, 1), LocalDate.of(currentYear, 12, 31), true);
-
-        LocalDate latestClDate = existingLeaves.stream()
-                .filter(leave -> (leave.getStatus().equals("PENDING") || leave.getStatus().equals("APPROVED")) && leave.getStartDate().isAfter(LocalDate.now()))
-                .map(LeaveApplication::getStartDate)
-                .max(LocalDate::compareTo)
-                .orElse(null);
-
-        if (latestClDate != null && startDate.isBefore(latestClDate) && startDate.getMonthValue() != latestClDate.getMonthValue()) {
-            logger.warn("User {} attempted to apply CL before latest advance CL date {}", user.getId(), latestClDate);
-            throw new RuntimeException("Cannot apply CL before the latest advance CL application date: " + latestClDate + " unless applying for the same month");
         }
 
         double availableForApplicationMonth = calculateAvailableClUpToMonth(user, applicationMonth, applicationYear);
