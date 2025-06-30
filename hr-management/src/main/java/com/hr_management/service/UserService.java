@@ -1,9 +1,11 @@
 package com.hr_management.service;
 
 import com.hr_management.Entity.Department;
+import com.hr_management.Entity.PendingSignup; // Add import
 import com.hr_management.Entity.User;
 import com.hr_management.Entity.LeaveBalance;
 import com.hr_management.Repository.DepartmentRepository;
+import com.hr_management.Repository.PendingSignupRepository; // Add import
 import com.hr_management.Repository.UserRepository;
 import com.hr_management.Util.JwtUtil;
 import com.hr_management.dto.ReportingPersonDTO;
@@ -34,6 +36,9 @@ public class UserService implements UserDetailsService {
 
     @Autowired
     private DepartmentRepository departmentRepository;
+
+    @Autowired
+    private PendingSignupRepository pendingSignupRepository; // Add repository
 
     @Autowired
     private JwtUtil jwtUtil;
@@ -69,7 +74,6 @@ public class UserService implements UserDetailsService {
         return user;
     }
 
-    // Other methods remain unchanged
     public String generateToken(User user) {
         return jwtUtil.generateToken(user.getUsername(), user.getRole(), user.getDepartment());
     }
@@ -160,15 +164,16 @@ public class UserService implements UserDetailsService {
         return dtos;
     }
 
-    public User signup(UserDTO userDTO) {
+    public PendingSignup signup(UserDTO userDTO) { // Change return type to PendingSignup
         logger.info("Processing signup for username: {}", userDTO.getUsername());
-        if (userRepository.existsByUsername(userDTO.getUsername())) {
+        // Check uniqueness in both users and pending_signups
+        if (userRepository.existsByUsername(userDTO.getUsername()) || pendingSignupRepository.existsByUsername(userDTO.getUsername())) {
             throw new IllegalArgumentException("Username already taken");
         }
-        if (userRepository.existsByEmail(userDTO.getEmail())) {
+        if (userRepository.existsByEmail(userDTO.getEmail()) || pendingSignupRepository.existsByEmail(userDTO.getEmail())) {
             throw new IllegalArgumentException("Email already registered");
         }
-        if (userRepository.existsByEmployeeId(userDTO.getEmployeeId())) {
+        if (userRepository.existsByEmployeeId(userDTO.getEmployeeId()) || pendingSignupRepository.existsByEmployeeId(userDTO.getEmployeeId())) {
             throw new IllegalArgumentException("Employee ID already registered");
         }
 
@@ -186,71 +191,99 @@ public class UserService implements UserDetailsService {
             }
         }
 
+        String normalizedDept = normalizeDepartment(userDTO.getDepartment());
         Department departmentEntity = null;
         if (!"director".equalsIgnoreCase(userDTO.getRole())) {
-            String normalizedDept = normalizeDepartment(userDTO.getDepartment());
             departmentEntity = departmentRepository.findByName(normalizedDept)
                     .orElseThrow(() -> new IllegalArgumentException("Department not found: " + normalizedDept));
         }
 
-        LeaveBalance leaveBalance = new LeaveBalance();
-        leaveBalance.setCasualLeaveUsed(0.0);
-        leaveBalance.setCasualLeaveRemaining(userDTO.getRole().equalsIgnoreCase("ASSISTANT_DIRECTOR") ? 12.0 : 10.0);
-        leaveBalance.setEarnedLeaveUsedFirstHalf(0.0);
-        leaveBalance.setEarnedLeaveUsedSecondHalf(0.0);
-        leaveBalance.setMaternityLeaveUsed(0.0);
-        leaveBalance.setMaternityLeaveRemaining(userDTO.getGender().equalsIgnoreCase("Female") ? 182.0 : 0.0);
-        leaveBalance.setPaternityLeaveUsed(0.0);
-        leaveBalance.setPaternityLeaveRemaining(userDTO.getGender().equalsIgnoreCase("Male") ? 15.0 : 0.0);
-
-        User user = new User();
-        user.setFullName(userDTO.getFullName());
-        user.setUsername(userDTO.getUsername());
-        user.setPassword(passwordEncoder.encode(userDTO.getPassword()));
-        user.setEmail(userDTO.getEmail());
-        user.setDepartment(userDTO.getDepartment());
-        user.setDepartmentEntity(departmentEntity);
-        user.setRole(userDTO.getRole());
-        user.setGender(userDTO.getGender());
-        user.setJoinDate(userDTO.getJoinDate());
-        user.setLeaveBalance(leaveBalance);
-        user.setStatus("PENDING");
-        user.setLeaveWithoutPayment(0.0);
-        user.setHalfDayLwp(0.0);
-        user.setEmployeeId(userDTO.getEmployeeId());
+        PendingSignup pendingSignup = new PendingSignup();
+        pendingSignup.setFullName(userDTO.getFullName());
+        pendingSignup.setUsername(userDTO.getUsername());
+        pendingSignup.setPassword(passwordEncoder.encode(userDTO.getPassword()));
+        pendingSignup.setEmail(userDTO.getEmail());
+        pendingSignup.setDepartment(normalizedDept);
+        pendingSignup.setRole(userDTO.getRole().toUpperCase());
+        pendingSignup.setGender(userDTO.getGender());
+        pendingSignup.setJoinDate(userDTO.getJoinDate());
+        pendingSignup.setEmployeeId(userDTO.getEmployeeId());
+        pendingSignup.setStatus("PENDING");
 
         if (userDTO.getReportingToId() != null) {
             User reportingTo = userRepository.findById(userDTO.getReportingToId())
                     .orElseThrow(() -> new IllegalArgumentException("Reporting person not found with ID: " + userDTO.getReportingToId()));
-            user.setReportingTo(reportingTo);
+            pendingSignup.setReportingTo(reportingTo);
         }
 
-        User savedUser = userRepository.save(user);
-        logger.info("User signed up successfully: {}", savedUser.getUsername());
-        return savedUser;
+        PendingSignup savedPendingSignup = pendingSignupRepository.save(pendingSignup);
+        logger.info("Signup request saved successfully: {}", savedPendingSignup.getUsername());
+        return savedPendingSignup;
     }
 
-    public List<User> getPendingUsers() {
-        logger.info("Fetching pending users");
-        return userRepository.findByStatus("PENDING");
+    public List<PendingSignup> getPendingUsers() { // Change return type to List<PendingSignup>
+        logger.info("Fetching pending signup requests");
+        return pendingSignupRepository.findByStatus("PENDING");
     }
 
     public void approveUser(Long userId) {
-        logger.info("Approving user with id: {}", userId);
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + userId));
+        logger.info("Approving signup request with id: {}", userId);
+        PendingSignup pendingSignup = pendingSignupRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("Signup request not found with ID: " + userId));
+
+        Department departmentEntity = null;
+        if (!"DIRECTOR".equalsIgnoreCase(pendingSignup.getRole())) {
+            departmentEntity = departmentRepository.findByName(pendingSignup.getDepartment())
+                    .orElseThrow(() -> new IllegalArgumentException("Department not found: " + pendingSignup.getDepartment()));
+        }
+
+        LeaveBalance leaveBalance = new LeaveBalance();
+        leaveBalance.setCasualLeaveUsed(0.0);
+        leaveBalance.setCasualLeaveRemaining(pendingSignup.getRole().equalsIgnoreCase("ASSISTANT_DIRECTOR") ? 12.0 : 10.0);
+        leaveBalance.setEarnedLeaveUsedFirstHalf(0.0);
+        leaveBalance.setEarnedLeaveUsedSecondHalf(0.0);
+        leaveBalance.setMaternityLeaveUsed(0.0);
+        leaveBalance.setMaternityLeaveRemaining(pendingSignup.getGender().equalsIgnoreCase("Female") ? 182.0 : 0.0);
+        leaveBalance.setPaternityLeaveUsed(0.0);
+        leaveBalance.setPaternityLeaveRemaining(pendingSignup.getGender().equalsIgnoreCase("Male") ? 15.0 : 0.0);
+
+        User user = new User();
+        user.setFullName(pendingSignup.getFullName());
+        user.setUsername(pendingSignup.getUsername());
+        user.setPassword(pendingSignup.getPassword());
+        user.setEmail(pendingSignup.getEmail());
+        user.setDepartment(pendingSignup.getDepartment());
+        user.setDepartmentEntity(departmentEntity);
+        user.setRole(pendingSignup.getRole());
+        user.setGender(pendingSignup.getGender());
+        user.setJoinDate(pendingSignup.getJoinDate());
+        user.setLeaveBalance(leaveBalance);
         user.setStatus("ACTIVE");
+        user.setLeaveWithoutPayment(0.0);
+        user.setHalfDayLwp(0.0);
+        user.setEmployeeId(pendingSignup.getEmployeeId());
+        user.setReportingTo(pendingSignup.getReportingTo());
+
         userRepository.save(user);
-        emailService.sendSignupApprovalEmail(user.getEmail(), user.getFullName());
+        pendingSignupRepository.delete(pendingSignup);
+        emailService.sendSignupApprovalEmail(pendingSignup.getEmail(), pendingSignup.getFullName());
     }
 
     public void rejectUser(Long userId, String reason) {
-        logger.info("Rejecting user with id: {}", userId);
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + userId));
-        user.setStatus("REJECTED");
-        user.setDisapproveReason(reason);
-        userRepository.save(user);
-        emailService.sendSignupRejectionEmail(user.getEmail(), user.getFullName(), reason);
+        logger.info("Rejecting signup request with id: {}", userId);
+        PendingSignup pendingSignup = pendingSignupRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("Signup request not found with ID: " + userId));
+        pendingSignup.setStatus("REJECTED");
+        pendingSignup.setReason(reason);
+        pendingSignupRepository.save(pendingSignup);
+        emailService.sendSignupRejectionEmail(pendingSignup.getEmail(), pendingSignup.getFullName(), reason);
+    }
+
+    public void deletePendingSignup(Long userId) { // New method for deletion
+        logger.info("Deleting signup request with id: {}", userId);
+        PendingSignup pendingSignup = pendingSignupRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("Signup request not found with ID: " + userId));
+        pendingSignupRepository.delete(pendingSignup);
+        emailService.sendSignupRejectionEmail(pendingSignup.getEmail(), pendingSignup.getFullName(), "Signup request was deleted by HR.");
     }
 }

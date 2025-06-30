@@ -250,7 +250,7 @@ export default function HRDashboard() {
 
       if (response.ok) {
         setPendingSignups(prev => prev.filter(user => user.id !== userId));
-        setNotification({ message: 'User approved successfully.', type: 'success' });
+        setNotification({ message: 'User approved and added to the system successfully.', type: 'success' });
       } else {
         const data = await response.json().catch(() => ({}));
         setNotification({ message: `Failed to approve user: ${data.message || 'Unknown error'}`, type: 'error' });
@@ -285,14 +285,14 @@ export default function HRDashboard() {
       if (response.ok) {
         setPendingSignups(prev => prev.filter(user => user.id !== userId));
         setDisapproveModal({ open: false, userId: null, reason: '' });
-        setNotification({ message: 'User disapproved successfully.', type: 'success' });
+        setNotification({ message: 'Signup request rejected and removed successfully.', type: 'success' });
       } else {
         const data = await response.json().catch(() => ({}));
         setNotification({ message: `Failed to disapprove user: ${data.message || 'Unknown error'}`, type: 'error' });
       }
     } catch (error) {
       console.error('Error disapproving signup:', error);
-      setNotification({ message: 'Failed to disapprove user.', type: 'error' });
+      setNotification({ message: 'Failed to reject signup request.', type: 'error' });
     } finally {
       setIsLoading(false);
     }
@@ -780,36 +780,36 @@ export default function HRDashboard() {
     const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
     return (
-        <div className="bg-white p-6 rounded-lg shadow-lg border border-gray-200">
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="text-xl font-semibold text-gray-900">{monthName} {year}</h3>
-            <div className="flex space-x-2">
+        <div className="bg-white p-4 rounded-lg shadow-md border border-gray-200">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">{monthName} {year}</h3>
+            <div className="flex space-x-1">
               <button
                   onClick={() => handleMonthChange(-1)}
-                  className="p-2 rounded-full hover:bg-gray-100 transition duration-200"
+                  className="p-1 rounded-full hover:bg-gray-100 transition duration-200"
                   aria-label="Previous month"
               >
-                <ChevronLeft size={20} className="text-gray-700" />
+                <ChevronLeft size={16} className="text-gray-700" />
               </button>
               <button
                   onClick={() => handleMonthChange(1)}
-                  className="p-2 rounded-full hover:bg-gray-100 transition duration-200"
+                  className="p-1 rounded-full hover:bg-gray-100 transition duration-200"
                   aria-label="Next month"
               >
-                <ChevronRight size={20} className="text-gray-700" />
+                <ChevronRight size={16} className="text-gray-700" />
               </button>
             </div>
           </div>
-          <div className="grid grid-cols-7 gap-1 text-center text-sm font-semibold text-gray-600 mb-3">
+          <div className="grid grid-cols-7 gap-0.5 text-center text-xs font-semibold text-gray-600 mb-2">
             {daysOfWeek.map(day => (
-                <div key={`weekday-${day}`} className="py-2">{day}</div>
+                <div key={`weekday-${day}`} className="py-1">{day}</div>
             ))}
           </div>
-          <div className="grid grid-cols-7 gap-1">
+          <div className="grid grid-cols-7 gap-0.5 text-[10px]">
             {calendarDays.map((day, index) => (
                 <div
                     key={day.day ? `${year}-${monthName}-${day.day}` : `empty-${index}`}
-                    className={`aspect-square flex items-center justify-center border rounded-sm text-sm font-medium transition-all duration-200 ${
+                    className={`aspect-square flex items-center justify-center border rounded-sm font-medium transition-all duration-200 ${
                         day.day ? getLeaveColor(day.leaveType, day.isHalfDay, day.isHoliday) : 'bg-gray-100'
                     } ${day.day && (day.leaveType || day.isHalfDay || day.isHoliday) ? 'cursor-help' : ''}`}
                     title={day.day && (day.leaveType || day.isHalfDay || day.isHoliday) ? getLeaveTooltip(day.leaveType, day.isHalfDay, day.isHoliday) : ''}
@@ -818,11 +818,12 @@ export default function HRDashboard() {
                 </div>
             ))}
           </div>
-          <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-3">
+
+          <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-2">
             {leaveTypes.map(leave => (
-                <div key={leave.type} className="flex items-center space-x-2">
-                  <div className={`w-4 h-4 ${leave.bgColor} border ${leave.borderColor} rounded-sm`}></div>
-                  <span className="text-sm text-gray-700">{leave.label}</span>
+                <div key={leave.type} className="flex items-center space-x-1">
+                  <div className={`w-3 h-3 ${leave.bgColor} border ${leave.borderColor} rounded-sm`}></div>
+                  <span className="text-xs text-gray-700">{leave.label}</span>
                 </div>
             ))}
           </div>
@@ -891,6 +892,33 @@ export default function HRDashboard() {
   };
 
   const renderPendingSignups = () => {
+    const handleDeleteSignup = async (userId) => {
+      const token = localStorage.getItem('authToken');
+      try {
+        setIsLoading(true);
+        const response = await fetch(`http://localhost:8081/api/hr/delete-signup/${userId}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (response.ok) {
+          setPendingSignups(prev => prev.filter(user => user.id !== userId));
+          setNotification({ message: 'Signup request deleted successfully.', type: 'success' });
+        } else {
+          const data = await response.json().catch(() => ({}));
+          setNotification({ message: `Failed to delete signup: ${data.message || 'Unknown error'}`, type: 'error' });
+        }
+      } catch (error) {
+        console.error('Error deleting signup:', error);
+        setNotification({ message: 'Failed to delete signup request.', type: 'error' });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
     if (pendingSignups.length === 0 && !isLoading) {
       return (
           <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center">
@@ -900,58 +928,61 @@ export default function HRDashboard() {
     }
 
     return (
-        <div className="bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider">ID</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider">Name</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider">Email</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider">Role</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider">Department</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider">Gender</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider">Reporting To</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider">Join Date</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
-              </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-              {pendingSignups.map(user => (
-                  <tr key={user.id} className="hover:bg-gray-50 transition duration-150">
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-900">{user.id}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-900">{user.fullName}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-600">{user.email}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-600">{user.role}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-600">{user.department || 'N/A'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-600">{user.gender || 'N/A'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-600">{user.reportingToName || 'N/A'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-600">{user.joinDate || 'N/A'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-600">{user.status}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex space-x-2">
-                        <button
-                            onClick={() => handleApproveSignup(user.id)}
-                            className="bg-green-600 text-white px-3 py-1 rounded-lg hover:bg-green-700 transition duration-200"
-                            disabled={isLoading}
-                        >
-                          Approve
-                        </button>
-                        <button
-                            onClick={() => setDisapproveModal({ open: true, userId: user.id, reason: '' })}
-                            className="bg-red-600 text-white px-3 py-1 rounded-lg hover:bg-red-700 transition duration-200"
-                            disabled={isLoading}
-                        >
-                          Disapprove
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-              ))}
-              </tbody>
-            </table>
-          </div>
+        <div className="bg-white rounded-lg shadow-lg border border-gray-200 overflow-x-auto max-w-full">
+          <table className="w-full divide-y divide-gray-200 table-fixed">
+            <thead className="bg-gray-50">
+            <tr>
+              <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-[6%] min-w-[40px]">ID</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-[10%] min-w-[80px]">Name</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-[10%] min-w-[70px]">Role</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-[14%] min-w-[90px]">Department</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-[10%] min-w-[60px]">Gender</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-[14%] min-w-[90px]">Reporting To</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-[12%] min-w-[80px]">Join Date</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-[10%] min-w-[60px]">Status</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-[18%] min-w-[140px]">Actions</th>
+            </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+            {pendingSignups.map(user => (
+                <tr key={user.id} className="hover:bg-gray-50 transition duration-150">
+                  <td className="px-3 py-2 whitespace-nowrap text-gray-900 text-xs">{user.employeeId}</td>
+                  <td className="px-3 py-2 text-gray-900 truncate text-xs">{user.fullName}</td>
+                  <td className="px-3 py-2 text-gray-600 text-xs">{user.role}</td>
+                  <td className="px-3 py-2 text-gray-600 text-xs">{user.department || 'N/A'}</td>
+                  <td className="px-3 py-2 text-gray-600 text-xs">{user.gender || 'N/A'}</td>
+                  <td className="px-3 py-2 text-gray-600 truncate text-xs">{user.reportingToName || 'N/A'}</td>
+                  <td className="px-3 py-2 text-gray-600 text-xs">{user.joinDate || 'N/A'}</td>
+                  <td className="px-3 py-2 text-gray-600 text-xs">{user.status}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex space-x-1 flex-nowrap">
+                      <button
+                          onClick={() => handleApproveSignup(user.id)}
+                          className="bg-green-600 text-white px-2 py-1 rounded-md hover:bg-green-700 transition duration-200 text-xs whitespace-nowrap"
+                          disabled={isLoading}
+                      >
+                        Approve
+                      </button>
+                      <button
+                          onClick={() => setDisapproveModal({ open: true, userId: user.id, reason: '' })}
+                          className="bg-red-600 text-white px-2 py-1 rounded-md hover:bg-red-700 transition duration-200 text-xs whitespace-nowrap"
+                          disabled={isLoading}
+                      >
+                        Disapprove
+                      </button>
+                      <button
+                          onClick={() => handleDeleteSignup(user.id)}
+                          className="bg-gray-600 text-white px-2 py-1 rounded-md hover:bg-gray-700 transition duration-200 text-xs whitespace-nowrap"
+                          disabled={isLoading}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+            ))}
+            </tbody>
+          </table>
         </div>
     );
   };

@@ -47,6 +47,19 @@ public class LeaveServiceImpl implements LeaveService {
         logger.info("Applying leave for user: {}, type: {}", userService.getCurrentUser().getId(), application.getLeaveType());
         User user = userService.getCurrentUser();
 
+        // Check for existing pending leave applications
+        List<LeaveApplication> pendingLeaves = leaveApplicationRepository.findByUserAndStatus(user, "PENDING");
+        if (!pendingLeaves.isEmpty()) {
+            StringBuilder errorMessage = new StringBuilder(
+                    "You have pending leave applications that must be approved or rejected before applying for a new leave:\n");
+            for (LeaveApplication pending : pendingLeaves) {
+                errorMessage.append(String.format("- %s from %s to %s\n",
+                        pending.getLeaveType(), pending.getStartDate(), pending.getEndDate()));
+            }
+            logger.warn("User {} attempted to apply a new leave while having pending applications: {}", user.getId(), errorMessage);
+            throw new RuntimeException(errorMessage.toString());
+        }
+
         // Validate that join date is set and leave start date is not before join date
         LocalDate joinDate = user.getJoinDate();
         if (joinDate == null) {
@@ -81,6 +94,16 @@ public class LeaveServiceImpl implements LeaveService {
                 logger.warn("Attempted to apply non-CL leave with past start date: {} for user: {}", application.getStartDate(), user.getId());
                 throw new RuntimeException("Start date cannot be in the past for non-casual leave types");
             }
+        }
+
+        // Check if start or end date is a holiday for all leave types
+        if (holidayService.isHoliday(application.getStartDate())) {
+            logger.warn("User {} attempted to apply {} starting on a holiday: {}", user.getId(), application.getLeaveType(), application.getStartDate());
+            throw new RuntimeException(application.getLeaveType() + " cannot start on a holiday.");
+        }
+        if (!application.getLeaveType().startsWith("HALF_DAY") && application.getEndDate() != null && holidayService.isHoliday(application.getEndDate())) {
+            logger.warn("User {} attempted to apply {} ending on a holiday: {}", user.getId(), application.getLeaveType(), application.getEndDate());
+            throw new RuntimeException(application.getLeaveType() + " cannot end on a holiday.");
         }
 
         if (application.getLeaveType().equals("ML")) {
@@ -140,10 +163,6 @@ public class LeaveServiceImpl implements LeaveService {
 
         if (application.getLeaveType().startsWith("HALF_DAY")) {
             LocalDate startDate = application.getStartDate();
-            if (holidayService.isHoliday(startDate)) {
-                logger.warn("User {} attempted to apply half-day leave on a holiday: {}", user.getId(), startDate);
-                throw new RuntimeException("Half-day leave cannot be applied on a holiday.");
-            }
             List<LeaveApplication> existingLeaves = leaveApplicationRepository.findByUserAndStartDate(user, startDate);
             boolean hasHalfDayLeave = existingLeaves.stream()
                     .anyMatch(leave -> leave.getLeaveType().startsWith("HALF_DAY") &&
@@ -291,7 +310,7 @@ public class LeaveServiceImpl implements LeaveService {
         User approver = leave.getUser().getReportingTo();
         if (approver == null || !approver.getId().equals(currentUser.getId())) {
             logger.warn("User {} attempted to cancel leave {} they are not authorized for", currentUser.getId(), leaveId);
-            throw new RuntimeException("You are not authorized to cancel this leave");
+            throw new RuntimeException("You are not authorized to canceled this leave");
         }
 
         if (!leave.getStatus().equals("APPROVED")) {

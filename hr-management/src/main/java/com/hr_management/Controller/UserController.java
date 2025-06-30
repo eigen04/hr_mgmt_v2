@@ -1,10 +1,11 @@
 package com.hr_management.Controller;
 
 import com.hr_management.Entity.Department;
+import com.hr_management.Entity.PendingSignup; // Add import
 import com.hr_management.Entity.User;
 import com.hr_management.service.DepartmentService;
 import com.hr_management.service.UserService;
-import com.hr_management.dto.UserDTO; // Import the external UserDTO
+import com.hr_management.dto.UserDTO;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,8 +16,10 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDate;
-import java.util.*;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @RestController
@@ -159,23 +162,23 @@ public class UserController {
     public ResponseEntity<List<UserDTO>> getPendingSignups() {
         logger.info("Fetching pending signups");
         try {
-            List<User> pendingUsers = userService.getPendingUsers();
-            List<UserDTO> userDTOs = pendingUsers.stream().map(user -> {
+            List<PendingSignup> pendingSignups = userService.getPendingUsers(); // Update to PendingSignup
+            List<UserDTO> userDTOs = pendingSignups.stream().map(pending -> {
                 UserDTO dto = new UserDTO();
-                dto.setId(user.getId());
-                dto.setFullName(user.getFullName());
-                dto.setUsername(user.getUsername());
-                dto.setEmail(user.getEmail());
-                dto.setDepartment(user.getDepartment());
-                dto.setRole(user.getRole());
-                dto.setGender(user.getGender());
-                dto.setJoinDate(user.getJoinDate());
-                dto.setEmployeeId(user.getEmployeeId());
-                dto.setStatus(user.getStatus());
-                dto.setDisapproveReason(user.getDisapproveReason());
-                if (user.getReportingTo() != null) {
-                    dto.setReportingToId(user.getReportingTo().getId());
-                    dto.setReportingToName(user.getReportingTo().getFullName());
+                dto.setId(pending.getId());
+                dto.setFullName(pending.getFullName());
+                dto.setUsername(pending.getUsername());
+                dto.setEmail(pending.getEmail());
+                dto.setDepartment(pending.getDepartment());
+                dto.setRole(pending.getRole());
+                dto.setGender(pending.getGender());
+                dto.setJoinDate(pending.getJoinDate());
+                dto.setEmployeeId(pending.getEmployeeId());
+                dto.setStatus(pending.getStatus());
+                dto.setDisapproveReason(pending.getReason());
+                if (pending.getReportingTo() != null) {
+                    dto.setReportingToId(pending.getReportingTo().getId());
+                    dto.setReportingToName(pending.getReportingTo().getFullName());
                 }
                 return dto;
             }).collect(Collectors.toList());
@@ -213,12 +216,28 @@ public class UserController {
         }
         try {
             userService.rejectUser(userId, reason);
-            return ResponseEntity.ok(new AuthController.SuccessResponse("User disapproved successfully"));
+            return ResponseEntity.ok(new AuthController.SuccessResponse("Signup request rejected successfully"));
         } catch (IllegalArgumentException e) {
             logger.warn("Failed to disapprove signup: {}", e.getMessage());
             return ResponseEntity.badRequest().body(new AuthController.ErrorResponse(e.getMessage()));
         } catch (Exception e) {
             logger.error("Unexpected error disapproving signup: {}", e.getMessage(), e);
+            return ResponseEntity.status(500).body(new AuthController.ErrorResponse("An error occurred: " + e.getMessage()));
+        }
+    }
+
+    @DeleteMapping("/hr/delete-signup/{userId}")
+    @PreAuthorize("hasRole('HR')")
+    public ResponseEntity<?> deleteSignup(@PathVariable Long userId) {
+        logger.info("Deleting signup for user id: {}", userId);
+        try {
+            userService.deletePendingSignup(userId);
+            return ResponseEntity.ok(new AuthController.SuccessResponse("Signup request deleted successfully"));
+        } catch (IllegalArgumentException e) {
+            logger.warn("Failed to delete signup: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(new AuthController.ErrorResponse(e.getMessage()));
+        } catch (Exception e) {
+            logger.error("Unexpected error deleting signup: {}", e.getMessage(), e);
             return ResponseEntity.status(500).body(new AuthController.ErrorResponse("An error occurred: " + e.getMessage()));
         }
     }

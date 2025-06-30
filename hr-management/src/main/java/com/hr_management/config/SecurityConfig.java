@@ -76,15 +76,12 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
-                        // Explicitly permit OPTIONS and public endpoints
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/departments").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/roles").permitAll()
-                        // New holiday endpoints
                         .requestMatchers("/api/hr/holidays/**").hasAnyRole("HR", "DIRECTOR")
-                        // Role-based restrictions
                         .requestMatchers(HttpMethod.POST, "/api/departments").hasAnyRole("DIRECTOR", "HR")
                         .requestMatchers(HttpMethod.POST, "/api/roles").hasAnyRole("DIRECTOR", "HR")
                         .requestMatchers(HttpMethod.GET, "/api/departments/stats").hasRole("DIRECTOR")
@@ -94,7 +91,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/hr/pending-signups").hasRole("HR")
                         .requestMatchers(HttpMethod.POST, "/api/hr/approve-signup/*").hasRole("HR")
                         .requestMatchers(HttpMethod.POST, "/api/hr/disapprove-signup/*").hasRole("HR")
-                        // Authenticated endpoints
+                        .requestMatchers(HttpMethod.DELETE, "/api/hr/delete-signup/*").hasRole("HR") // Add new endpoint
                         .requestMatchers(HttpMethod.POST, "/api/leaves").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/leaves").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/leaves/balance").authenticated()

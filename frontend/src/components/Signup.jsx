@@ -198,8 +198,8 @@ export default function Signup() {
       gender: formData.gender,
       reportingToId: isReportingPersonRequired() ? formData.reportingToId : null,
       status: 'PENDING',
-      employeeId: formData.employeeId, // Added to payload
-      joinDate: formData.joinDate, // Added to payload
+      employeeId: formData.employeeId,
+      joinDate: formData.joinDate,
     };
 
     try {
@@ -212,28 +212,33 @@ export default function Signup() {
       const responseData = await response.json();
 
       if (response.ok) {
-        setNotification({ message: 'Signup request submitted! Awaiting HR approval.', type: 'success' });
+        setNotification({
+          message: 'Your signup request has been submitted and is awaiting HR approval. You will be notified once approved.',
+          type: 'success',
+        });
         setFormData({
           fullName: '',
           username: '',
           password: '',
           confirmPassword: '',
           email: '',
-          department: '',
-          role: '',
+          department: departments.length > 0 ? departments[0].name : '',
+          role: roles.length > 0 ? roles[0].name : '',
           gender: '',
           reportingToId: null,
           employeeId: '',
           joinDate: '',
         });
-        setTimeout(() => navigate('/'), 2000);
+        setSearchTerm('');
+        setIsDropdownOpen(false);
+        setTimeout(() => navigate('/'), 3000); // Increased timeout for user to read notification
       } else {
         setNotification({ message: `Signup failed: ${responseData.message || 'Unknown error'}`, type: 'error' });
-        setIsLoading(false);
       }
     } catch (error) {
       console.error('Signup error:', error);
-      setNotification({ message: 'An error occurred. Please try again.', type: 'error' });
+      setNotification({ message: 'An error occurred during signup. Please try again.', type: 'error' });
+    } finally {
       setIsLoading(false);
     }
   };
