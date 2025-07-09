@@ -1,11 +1,11 @@
 package com.hr_management.service;
 
 import com.hr_management.Entity.Department;
-import com.hr_management.Entity.PendingSignup; // Add import
+import com.hr_management.Entity.PendingSignup;
 import com.hr_management.Entity.User;
 import com.hr_management.Entity.LeaveBalance;
 import com.hr_management.Repository.DepartmentRepository;
-import com.hr_management.Repository.PendingSignupRepository; // Add import
+import com.hr_management.Repository.PendingSignupRepository;
 import com.hr_management.Repository.UserRepository;
 import com.hr_management.Util.JwtUtil;
 import com.hr_management.dto.ReportingPersonDTO;
@@ -38,7 +38,7 @@ public class UserService implements UserDetailsService {
     private DepartmentRepository departmentRepository;
 
     @Autowired
-    private PendingSignupRepository pendingSignupRepository; // Add repository
+    private PendingSignupRepository pendingSignupRepository;
 
     @Autowired
     private JwtUtil jwtUtil;
@@ -119,7 +119,7 @@ public class UserService implements UserDetailsService {
     private String normalizeDepartment(String deptName) {
         if (deptName == null) return null;
         if (deptName.toLowerCase().contains("admin")) {
-            return deptName.toLowerCase().contains("administration") ? "Administration" : "Admin";
+            return "Admin (Administration)";
         }
         return deptName;
     }
@@ -129,8 +129,7 @@ public class UserService implements UserDetailsService {
         String normalizedDept = normalizeDepartment(department);
         logger.debug("Normalized department: {}", normalizedDept);
 
-        if ((normalizedDept != null && (normalizedDept.equalsIgnoreCase("Admin") || normalizedDept.equalsIgnoreCase("Administration"))
-                && role != null && role.equalsIgnoreCase("HR")) ||
+        if ((normalizedDept != null && normalizedDept.equals("Admin (Administration)") && role != null && role.equalsIgnoreCase("HR")) ||
                 (role != null && role.equalsIgnoreCase("director"))) {
             logger.debug("No reporting persons required for role: {}, department: {}", role, normalizedDept);
             return Collections.emptyList();
@@ -164,7 +163,7 @@ public class UserService implements UserDetailsService {
         return dtos;
     }
 
-    public PendingSignup signup(UserDTO userDTO) { // Change return type to PendingSignup
+    public Object signup(UserDTO userDTO) { // Changed return type to Object to handle both User and PendingSignup
         logger.info("Processing signup for username: {}", userDTO.getUsername());
         // Check uniqueness in both users and pending_signups
         if (userRepository.existsByUsername(userDTO.getUsername()) || pendingSignupRepository.existsByUsername(userDTO.getUsername())) {
@@ -198,30 +197,87 @@ public class UserService implements UserDetailsService {
                     .orElseThrow(() -> new IllegalArgumentException("Department not found: " + normalizedDept));
         }
 
-        PendingSignup pendingSignup = new PendingSignup();
-        pendingSignup.setFullName(userDTO.getFullName());
-        pendingSignup.setUsername(userDTO.getUsername());
-        pendingSignup.setPassword(passwordEncoder.encode(userDTO.getPassword()));
-        pendingSignup.setEmail(userDTO.getEmail());
-        pendingSignup.setDepartment(normalizedDept);
-        pendingSignup.setRole(userDTO.getRole().toUpperCase());
-        pendingSignup.setGender(userDTO.getGender());
-        pendingSignup.setJoinDate(userDTO.getJoinDate());
-        pendingSignup.setEmployeeId(userDTO.getEmployeeId());
-        pendingSignup.setStatus("PENDING");
+        // Check if user is Admin HR
+        boolean isAdminHR = normalizedDept != null && normalizedDept.equals("Admin (Administration)") && "HR".equalsIgnoreCase(userDTO.getRole());
 
-        if (userDTO.getReportingToId() != null) {
-            User reportingTo = userRepository.findById(userDTO.getReportingToId())
-                    .orElseThrow(() -> new IllegalArgumentException("Reporting person not found with ID: " + userDTO.getReportingToId()));
-            pendingSignup.setReportingTo(reportingTo);
+        // Check if reporting person is required
+        boolean isReportingPersonRequired = !(
+                isAdminHR || "director".equalsIgnoreCase(userDTO.getRole())
+        );
+
+        if (isReportingPersonRequired && userDTO.getReportingToId() == null) {
+            throw new IllegalArgumentException("Reporting person is required for this role and department");
         }
 
-        PendingSignup savedPendingSignup = pendingSignupRepository.save(pendingSignup);
-        logger.info("Signup request saved successfully: {}", savedPendingSignup.getUsername());
-        return savedPendingSignup;
+        if (isAdminHR) {
+            // Directly create User entity for Admin HR
+            LeaveBalance leaveBalance = new LeaveBalance();
+            leaveBalance.setCasualLeaveUsed(0.0);
+            leaveBalance.setCasualLeaveRemaining("ASSISTANT_DIRECTOR".equalsIgnoreCase(userDTO.getRole()) ? 12.0 : 10.0);
+            leaveBalance.setEarnedLeaveUsedFirstHalf(0.0);
+            leaveBalance.setEarnedLeaveUsedSecondHalf(0.0);
+            leaveBalance.setMaternityLeaveUsed(0.0);
+            leaveBalance.setMaternityLeaveRemaining(userDTO.getGender().equalsIgnoreCase("Female") ? 182.0 : 0.0);
+            leaveBalance.setPaternityLeaveUsed(0.0);
+            leaveBalance.setPaternityLeaveRemaining(userDTO.getGender().equalsIgnoreCase("Male") ? 15.0 : 0.0);
+
+            User user = new User();
+            user.setFullName(userDTO.getFullName());
+            user.setUsername(userDTO.getUsername());
+            user.setPassword(passwordEncoder.encode(userDTO.getPassword()));
+            user.setEmail(userDTO.getEmail());
+            user.setDepartment(normalizedDept);
+            user.setDepartmentEntity(departmentEntity);
+            user.setRole(userDTO.getRole().toUpperCase());
+            user.setGender(userDTO.getGender());
+            user.setJoinDate(userDTO.getJoinDate());
+            user.setEmployeeId(userDTO.getEmployeeId());
+            user.setStatus("ACTIVE");
+            user.setLeaveBalance(leaveBalance);
+            user.setLeaveWithoutPayment(0.0);
+            user.setHalfDayLwp(0.0);
+
+            if (userDTO.getReportingToId() != null) {
+                User reportingTo = userRepository.findById(userDTO.getReportingToId())
+                        .orElseThrow(() -> new IllegalArgumentException("Reporting person not found with ID: " + userDTO.getReportingToId()));
+                user.setReportingTo(reportingTo);
+            } else {
+                user.setReportingTo(null);
+            }
+
+            User savedUser = userRepository.save(user);
+            logger.info("Admin HR user created directly: {}", savedUser.getUsername());
+            emailService.sendSignupApprovalEmail(savedUser.getEmail(), savedUser.getFullName());
+            return savedUser;
+        } else {
+            // Save to pending_signups for other users
+            PendingSignup pendingSignup = new PendingSignup();
+            pendingSignup.setFullName(userDTO.getFullName());
+            pendingSignup.setUsername(userDTO.getUsername());
+            pendingSignup.setPassword(passwordEncoder.encode(userDTO.getPassword()));
+            pendingSignup.setEmail(userDTO.getEmail());
+            pendingSignup.setDepartment(normalizedDept);
+            pendingSignup.setRole(userDTO.getRole().toUpperCase());
+            pendingSignup.setGender(userDTO.getGender());
+            pendingSignup.setJoinDate(userDTO.getJoinDate());
+            pendingSignup.setEmployeeId(userDTO.getEmployeeId());
+            pendingSignup.setStatus("PENDING");
+
+            if (isReportingPersonRequired && userDTO.getReportingToId() != null) {
+                User reportingTo = userRepository.findById(userDTO.getReportingToId())
+                        .orElseThrow(() -> new IllegalArgumentException("Reporting person not found with ID: " + userDTO.getReportingToId()));
+                pendingSignup.setReportingTo(reportingTo);
+            } else {
+                pendingSignup.setReportingTo(null);
+            }
+
+            PendingSignup savedPendingSignup = pendingSignupRepository.save(pendingSignup);
+            logger.info("Signup request saved successfully: {}", savedPendingSignup.getUsername());
+            return savedPendingSignup;
+        }
     }
 
-    public List<PendingSignup> getPendingUsers() { // Change return type to List<PendingSignup>
+    public List<PendingSignup> getPendingUsers() {
         logger.info("Fetching pending signup requests");
         return pendingSignupRepository.findByStatus("PENDING");
     }
@@ -279,7 +335,7 @@ public class UserService implements UserDetailsService {
         emailService.sendSignupRejectionEmail(pendingSignup.getEmail(), pendingSignup.getFullName(), reason);
     }
 
-    public void deletePendingSignup(Long userId) { // New method for deletion
+    public void deletePendingSignup(Long userId) {
         logger.info("Deleting signup request with id: {}", userId);
         PendingSignup pendingSignup = pendingSignupRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("Signup request not found with ID: " + userId));

@@ -32,15 +32,12 @@ export default function Signup() {
 
   const normalizeDepartment = (deptName) => {
     if (!deptName) return '';
-    if (deptName.includes('Admin')) {
-      return deptName.includes('Administration') ? 'Administration' : 'Admin';
-    }
-    return deptName;
+    // Keep the exact name from the backend to avoid mismatches
+    return deptName; // No normalization needed since backend uses "Admin (Administration)"
   };
 
   const isReportingPersonRequired = () => {
-    const normalizedDept = normalizeDepartment(formData.department);
-    const isAdminHR = (normalizedDept === 'Admin' || normalizedDept === 'Administration') && formData.role.toUpperCase() === 'HR';
+    const isAdminHR = formData.department === 'Admin (Administration)' && formData.role.toUpperCase() === 'HR';
     return !isAdminHR && formData.role.toUpperCase() !== 'DIRECTOR';
   };
 
@@ -171,8 +168,19 @@ export default function Signup() {
       return;
     }
 
-    if (!formData.fullName || !formData.username || !formData.email || !formData.role || !formData.gender || !formData.employeeId || !formData.joinDate) {
-      setNotification({ message: 'Please fill in all required fields, including Employee ID and Join Date.', type: 'error' });
+    if (
+        !formData.fullName ||
+        !formData.username ||
+        !formData.email ||
+        !formData.role ||
+        !formData.gender ||
+        !formData.employeeId ||
+        !formData.joinDate
+    ) {
+      setNotification({
+        message: 'Please fill in all required fields, including Employee ID and Join Date.',
+        type: 'error',
+      });
       return;
     }
 
@@ -188,19 +196,23 @@ export default function Signup() {
 
     setIsLoading(true);
 
+    const isAdminHR = formData.department === 'Admin (Administration)' && formData.role.toUpperCase() === 'HR';
+
     const userData = {
       fullName: formData.fullName,
       username: formData.username,
       password: formData.password,
       email: formData.email,
-      department: formData.role.toUpperCase() === 'DIRECTOR' ? null : normalizeDepartment(formData.department),
+      department: formData.role.toUpperCase() === 'DIRECTOR' ? null : formData.department,
       role: formData.role.toUpperCase(),
       gender: formData.gender,
       reportingToId: isReportingPersonRequired() ? formData.reportingToId : null,
-      status: 'PENDING',
+      status: isAdminHR ? 'ACTIVE' : 'PENDING', // Set status to ACTIVE for Admin HR
       employeeId: formData.employeeId,
       joinDate: formData.joinDate,
     };
+
+    console.log('Submitting userData:', userData);
 
     try {
       const response = await fetch('http://localhost:8081/api/auth/signup', {
@@ -213,7 +225,9 @@ export default function Signup() {
 
       if (response.ok) {
         setNotification({
-          message: 'Your signup request has been submitted and is awaiting HR approval. You will be notified once approved.',
+          message: isAdminHR
+              ? 'Your account has been created successfully. You can now sign in.'
+              : 'Your signup request has been submitted and is awaiting HR approval. You will be notified once approved.',
           type: 'success',
         });
         setFormData({
@@ -231,7 +245,7 @@ export default function Signup() {
         });
         setSearchTerm('');
         setIsDropdownOpen(false);
-        setTimeout(() => navigate('/'), 3000); // Increased timeout for user to read notification
+        setTimeout(() => navigate('/'), 3000);
       } else {
         setNotification({ message: `Signup failed: ${responseData.message || 'Unknown error'}`, type: 'error' });
       }
@@ -412,7 +426,14 @@ export default function Signup() {
                         id="department"
                         name="department"
                         value={formData.department}
-                        onChange={handleChange}
+                        onChange={(e) => {
+                          const selectedValue = e.target.value;
+                          console.log('Selected department:', selectedValue);
+                          setFormData(prev => {
+                            console.log('Setting formData.department to:', selectedValue);
+                            return { ...prev, department: selectedValue };
+                          });
+                        }}
                         onFocus={() => setFocusedField('department')}
                         onBlur={() => setFocusedField('')}
                         disabled={formData.role.toUpperCase() === 'DIRECTOR'}
@@ -421,11 +442,16 @@ export default function Signup() {
                     >
                       <option value="">Select Department</option>
                       {departments.map((dept) => (
-                          <option key={dept.id || `dept-${dept.name}`} value={dept.name}>{dept.name}</option>
+                          <option key={dept.id || `dept-${dept.name}`} value={dept.name}>
+                            {console.log('Rendering option:', dept.name)}
+                            {dept.name}
+                          </option>
                       ))}
                     </select>
                   </div>
-                  {formData.role.toUpperCase() === 'DIRECTOR' && <p className="text-xs text-gray-500 mt-1">Directors do not belong to any department.</p>}
+                  {formData.role.toUpperCase() === 'DIRECTOR' && (
+                      <p className="text-xs text-gray-500 mt-1">Directors do not belong to any department.</p>
+                  )}
                 </div>
 
                 <div className="space-y-2">

@@ -1,6 +1,6 @@
 package com.hr_management.Controller;
 
-import com.hr_management.Entity.PendingSignup; // Add import
+import com.hr_management.Entity.PendingSignup;
 import com.hr_management.Entity.User;
 import com.hr_management.Repository.UserRepository;
 import com.hr_management.Util.JwtUtil;
@@ -64,10 +64,18 @@ public class AuthController {
     @PostMapping("/signup")
     public ResponseEntity<?> signup(@Valid @RequestBody UserDTO userDTO) {
         try {
-            userDTO.setStatus("PENDING");
-            PendingSignup pendingSignup = userService.signup(userDTO); // Update to PendingSignup
-            emailService.sendSignupConfirmationEmail(pendingSignup.getEmail(), pendingSignup.getFullName());
-            return ResponseEntity.ok(new SuccessResponse("Signup request submitted successfully. Awaiting HR approval."));
+            Object result = userService.signup(userDTO);
+            if (result instanceof User) {
+                User user = (User) result;
+                emailService.sendSignupApprovalEmail(user.getEmail(), user.getFullName());
+                return ResponseEntity.ok(new SuccessResponse("Account created successfully for Admin HR."));
+            } else if (result instanceof PendingSignup) {
+                PendingSignup pendingSignup = (PendingSignup) result;
+                emailService.sendSignupConfirmationEmail(pendingSignup.getEmail(), pendingSignup.getFullName());
+                return ResponseEntity.ok(new SuccessResponse("Signup request submitted successfully. Awaiting HR approval."));
+            } else {
+                throw new IllegalStateException("Unexpected result type from signup");
+            }
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
         } catch (Exception e) {
