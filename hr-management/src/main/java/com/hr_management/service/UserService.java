@@ -25,7 +25,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
-
+import org.springframework.security.core.Authentication;
 @Service
 public class UserService implements UserDetailsService {
 
@@ -163,7 +163,7 @@ public class UserService implements UserDetailsService {
         return dtos;
     }
 
-    public Object signup(UserDTO userDTO) { // Changed return type to Object to handle both User and PendingSignup
+    public Object signup(UserDTO userDTO) {
         logger.info("Processing signup for username: {}", userDTO.getUsername());
         // Check uniqueness in both users and pending_signups
         if (userRepository.existsByUsername(userDTO.getUsername()) || pendingSignupRepository.existsByUsername(userDTO.getUsername())) {
@@ -197,20 +197,20 @@ public class UserService implements UserDetailsService {
                     .orElseThrow(() -> new IllegalArgumentException("Department not found: " + normalizedDept));
         }
 
-        // Check if user is Admin HR
-        boolean isAdminHR = normalizedDept != null && normalizedDept.equals("Admin (Administration)") && "HR".equalsIgnoreCase(userDTO.getRole());
+        // Check if the current user is a Super Admin
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        boolean isSuperAdmin = authentication != null && authentication.getAuthorities().stream()
+                .anyMatch(auth -> auth.getAuthority().equals("ROLE_SUPER_ADMIN"));
 
-        // Check if reporting person is required
-        boolean isReportingPersonRequired = !(
-                isAdminHR || "director".equalsIgnoreCase(userDTO.getRole())
-        );
+        boolean isAdminHR = normalizedDept != null && normalizedDept.equals("Admin (Administration)") && "HR".equalsIgnoreCase(userDTO.getRole());
+        boolean isReportingPersonRequired = !("director".equalsIgnoreCase(userDTO.getRole()) || isAdminHR);
 
         if (isReportingPersonRequired && userDTO.getReportingToId() == null) {
             throw new IllegalArgumentException("Reporting person is required for this role and department");
         }
 
-        if (isAdminHR) {
-            // Directly create User entity for Admin HR
+        // If the user is a Super Admin and creating an HR user, create directly
+        if (isSuperAdmin && isAdminHR) {
             LeaveBalance leaveBalance = new LeaveBalance();
             leaveBalance.setCasualLeaveUsed(0.0);
             leaveBalance.setCasualLeaveRemaining("ASSISTANT_DIRECTOR".equalsIgnoreCase(userDTO.getRole()) ? 12.0 : 10.0);
@@ -246,11 +246,15 @@ public class UserService implements UserDetailsService {
             }
 
             User savedUser = userRepository.save(user);
-            logger.info("Admin HR user created directly: {}", savedUser.getUsername());
+            logger.info("HR user created directly by Super Admin: {}", savedUser.getUsername());
             emailService.sendSignupApprovalEmail(savedUser.getEmail(), savedUser.getFullName());
             return savedUser;
         } else {
-            // Save to pending_signups for other users
+            // Save to pending_signups for all users (including HR if not Super Admin)
+            if (isAdminHR) {
+                logger.info("HR signup request requires Super Admin approval for username: {}", userDTO.getUsername());
+            }
+
             PendingSignup pendingSignup = new PendingSignup();
             pendingSignup.setFullName(userDTO.getFullName());
             pendingSignup.setUsername(userDTO.getUsername());
@@ -273,6 +277,7 @@ public class UserService implements UserDetailsService {
 
             PendingSignup savedPendingSignup = pendingSignupRepository.save(pendingSignup);
             logger.info("Signup request saved successfully: {}", savedPendingSignup.getUsername());
+            emailService.sendSignupConfirmationEmail(savedPendingSignup.getEmail(), savedPendingSignup.getFullName());
             return savedPendingSignup;
         }
     }
@@ -286,6 +291,20 @@ public class UserService implements UserDetailsService {
         logger.info("Approving signup request with id: {}", userId);
         PendingSignup pendingSignup = pendingSignupRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("Signup request not found with ID: " + userId));
+
+        // Check if the current user is authorized to approve
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        boolean isSuperAdmin = authentication != null && authentication.getAuthorities().stream()
+                .anyMatch(auth -> auth.getAuthority().equals("ROLE_SUPER_ADMIN"));
+        boolean isHR = authentication != null && authentication.getAuthorities().stream()
+                .anyMatch(auth -> auth.getAuthority().equals("ROLE_HR"));
+
+        if (pendingSignup.getRole().equalsIgnoreCase("HR") && pendingSignup.getDepartment().equals("Admin (Administration)") && !isSuperAdmin) {
+            throw new IllegalArgumentException("Only Super Admin can approve HR users");
+        }
+        if (!isSuperAdmin && !isHR) {
+            throw new IllegalArgumentException("Only HR or Super Admin can approve users");
+        }
 
         Department departmentEntity = null;
         if (!"DIRECTOR".equalsIgnoreCase(pendingSignup.getRole())) {

@@ -67,12 +67,13 @@ public class AuthController {
             Object result = userService.signup(userDTO);
             if (result instanceof User) {
                 User user = (User) result;
-                emailService.sendSignupApprovalEmail(user.getEmail(), user.getFullName());
-                return ResponseEntity.ok(new SuccessResponse("Account created successfully for Admin HR."));
+                return ResponseEntity.ok(new SuccessResponse("Account created successfully by Super Admin."));
             } else if (result instanceof PendingSignup) {
                 PendingSignup pendingSignup = (PendingSignup) result;
-                emailService.sendSignupConfirmationEmail(pendingSignup.getEmail(), pendingSignup.getFullName());
-                return ResponseEntity.ok(new SuccessResponse("Signup request submitted successfully. Awaiting HR approval."));
+                String message = "HR".equalsIgnoreCase(pendingSignup.getRole()) && "Admin (Administration)".equals(pendingSignup.getDepartment())
+                        ? "HR signup request submitted successfully. Awaiting Super Admin approval."
+                        : "Signup request submitted successfully. Awaiting HR approval.";
+                return ResponseEntity.ok(new SuccessResponse(message));
             } else {
                 throw new IllegalStateException("Unexpected result type from signup");
             }

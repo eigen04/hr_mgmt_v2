@@ -91,7 +91,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/hr/pending-signups").hasRole("HR")
                         .requestMatchers(HttpMethod.POST, "/api/hr/approve-signup/*").hasRole("HR")
                         .requestMatchers(HttpMethod.POST, "/api/hr/disapprove-signup/*").hasRole("HR")
-                        .requestMatchers(HttpMethod.DELETE, "/api/hr/delete-signup/*").hasRole("HR") // Add new endpoint
+                        .requestMatchers(HttpMethod.DELETE, "/api/hr/delete-signup/*").hasRole("HR")
+                        .requestMatchers(HttpMethod.POST, "/api/superadmin/approve-hr-signup/*").hasRole("SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/superadmin/disapprove-hr-signup/*").hasRole("SUPER_ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/leaves").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/leaves").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/leaves/balance").authenticated()
