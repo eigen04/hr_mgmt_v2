@@ -27,7 +27,7 @@ CREATE TABLE `departments` (
   `name` varchar(255) NOT NULL,
   `description` varchar(255) DEFAULT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -36,7 +36,7 @@ CREATE TABLE `departments` (
 
 LOCK TABLES `departments` WRITE;
 /*!40000 ALTER TABLE `departments` DISABLE KEYS */;
-INSERT INTO `departments` VALUES (1,'Admin (Administration)','This department manages organizational operations, resources, and personnel functions to ensure efficient workflow and policy implementation across all units.');
+INSERT INTO `departments` VALUES (1,'Admin (Administration)','This department manages organizational operations, resources, and personnel functions to ensure efficient workflow and policy implementation across all units.'),(9,'Setcom',NULL);
 /*!40000 ALTER TABLE `departments` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -124,6 +124,7 @@ CREATE TABLE `monthly_cl_accrual` (
 
 LOCK TABLES `monthly_cl_accrual` WRITE;
 /*!40000 ALTER TABLE `monthly_cl_accrual` DISABLE KEYS */;
+INSERT INTO `monthly_cl_accrual` VALUES (1,1,7),(1,1,8),(1,1,9),(1,1,10),(1,1,11),(1,1,12);
 /*!40000 ALTER TABLE `monthly_cl_accrual` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -183,7 +184,7 @@ CREATE TABLE `pending_signups` (
   UNIQUE KEY `employee_id` (`employee_id`),
   KEY `reporting_to_id` (`reporting_to_id`),
   CONSTRAINT `pending_signups_ibfk_1` FOREIGN KEY (`reporting_to_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -208,7 +209,7 @@ CREATE TABLE `roles` (
   `description` varchar(255) DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `name` (`name`)
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -217,7 +218,7 @@ CREATE TABLE `roles` (
 
 LOCK TABLES `roles` WRITE;
 /*!40000 ALTER TABLE `roles` DISABLE KEYS */;
-INSERT INTO `roles` VALUES (1,'HR','Responsible for managing department tasks and overseeing team operations.');
+INSERT INTO `roles` VALUES (1,'HR','Responsible for managing department tasks and overseeing team operations.'),(2,'SUPER_ADMIN',NULL),(3,'Director',NULL);
 /*!40000 ALTER TABLE `roles` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -264,7 +265,7 @@ CREATE TABLE `users` (
   KEY `fk_reporting_to` (`reporting_to`),
   CONSTRAINT `fk_reporting_to` FOREIGN KEY (`reporting_to`) REFERENCES `users` (`id`),
   CONSTRAINT `fk_user_department` FOREIGN KEY (`department_id`) REFERENCES `departments` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -273,6 +274,7 @@ CREATE TABLE `users` (
 
 LOCK TABLES `users` WRITE;
 /*!40000 ALTER TABLE `users` DISABLE KEYS */;
+INSERT INTO `users` VALUES (1,NULL,'reblgamer40@gmail.com','Super Admin','$2a$10$ANks2o6gZ373FOQyF0TreOfETEyoNrcP0gFbcp2xINhRmWBgc5rKO','SUPER_ADMIN','superadmin',NULL,0,1,0,20,0,0,0,15,NULL,'ACTIVE',0,0,NULL,'2025-07-12',NULL,NULL,0,0,2025,'SA001',NULL),(2,'Admin (Administration)','jaya@gmail.com','Jaya Patel','$2a$10$I5C5rUOPJBgrazV4siYT5esP.EkG9loVSk8xY81ffDCSZLHXfmjeG','HR','jaya','Female',0,10,0,0,0,182,0,0,1,'ACTIVE',0,0,NULL,'2025-07-14',NULL,NULL,0,0,NULL,'jayaETH12',NULL);
 /*!40000 ALTER TABLE `users` ENABLE KEYS */;
 UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
@@ -285,4 +287,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2025-07-09 21:22:56
+-- Dump completed on 2025-07-14 13:57:49
